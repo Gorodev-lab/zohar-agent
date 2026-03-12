@@ -1,99 +1,260 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zohar SRE Lean Dashboard</title>
+    <title>ZOHAR SRE | Control de Misión</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        zohar: {
+                            bg: '#05070a',
+                            card: '#0d1117',
+                            border: '#1f2937',
+                            accent: '#3b82f6',
+                            risk: {
+                                alto: '#f87171',
+                                medio: '#fbbf24',
+                                bajo: '#34d399'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { background-color: #0a0c10; color: #c9d1d9; font-family: 'JetBrains Mono', monospace; }
-        .bg-card { background-color: #0d1117; border: 1px solid #30363d; }
-        .risk-alto { color: #ff7b72; border-left: 3px solid #ff7b72; }
-        .risk-medio { color: #d29922; border-left: 3px solid #d29922; }
-        .risk-bajo { color: #3fb950; border-left: 3px solid #3fb950; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #30363d; }
+        [x-cloak] { display: none !important; }
+        body { background-color: #05070a; background-image: radial-gradient(circle at 50% 50%, #111827 0%, #05070a 100%); background-attachment: fixed; }
+        .glass { background: rgba(13, 17, 23, 0.7); backdrop-filter: blur(8px); border: 1px solid rgba(75, 85, 99, 0.2); }
+        .pulse-dot { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(0.9); } }
+        .glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
     </style>
 </head>
-<body class="p-4 md:p-10" x-data="dashboard()">
-    <header class="flex justify-between items-end mb-10 border-b border-gray-800 pb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-white tracking-tighter">ZOHAR_SRE_LEAN</h1>
-            <p class="text-xs text-gray-500 mt-1">NATIONAL_MONITORING_PIPELINE_V5.0</p>
+<body class="text-slate-300 font-sans min-h-screen" x-data="dashboard()" x-init="init()" x-cloak>
+    
+    <!-- TOP NAVBAR -->
+    <nav class="sticky top-0 z-50 glass border-b border-gray-800 px-6 py-4 flex justify-between items-center mb-8">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center glow-blue">
+                <span class="text-white font-bold text-xl">Z</span>
+            </div>
+            <div>
+                <h1 class="text-white font-bold tracking-tight text-lg leading-tight uppercase">Zohar SRE <span class="text-blue-500 italic text-sm">Lean</span></h1>
+                <p class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">National Monitoring Pipeline</p>
+            </div>
         </div>
-        <div class="text-[10px] text-right space-y-1 font-mono">
-            <div class="text-yellow-500">CPU_TEMP: <span x-text="status.cpu_temp"></span></div>
-            <div class="text-green-500">ENGINE: <span x-text="status.llama_status"></span></div>
-        </div>
-    </header>
+        
+        <div class="flex items-center gap-6">
+            <!-- AGENT CONTROLS -->
+            <div class="flex items-center gap-2 bg-black/40 p-1 rounded-xl border border-gray-800">
+                <button @click="controlAgent('restart')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all" :class="status.agent_running ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/40' : 'bg-green-600/20 text-green-400 hover:bg-green-600/40'" x-text="status.agent_running ? 'Reiniciar' : 'Iniciar'"></button>
+                <button @click="controlAgent('stop')" x-show="status.agent_running" class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-red-600/20 text-red-400 hover:bg-red-600/40 transition-all">Detener</button>
+                <button @click="controlAgent('retry')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase bg-slate-800 text-slate-400 hover:bg-white hover:text-black transition-all">Reintentar Fallidos</button>
+            </div>
 
-    <!-- ACTIVE TELEMETRY -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-        <div class="bg-card p-4 rounded shadow-sm border-l-2 border-blue-500">
-            <span class="text-[10px] text-gray-500 block uppercase">Acción Actual</span>
-            <span class="text-sm font-bold text-blue-400" x-text="agent.action"></span>
+            <div class="hidden md:flex flex-col items-end font-mono text-[10px]">
+                <span class="text-slate-500 uppercase">Estado del Motor</span>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="w-2 h-2 rounded-full pulse-dot shadow-[0_0_8px_rgba(34,197,94,0.6)]" :class="status.agent_running ? 'bg-green-500' : 'bg-red-500'"></span>
+                    <span class="text-white font-bold" x-text="status.llama_status || 'Offline'"></span>
+                </div>
+            </div>
+            <div class="w-px h-8 bg-gray-800"></div>
+            <div class="text-right">
+                <span class="text-[10px] text-slate-500 uppercase block font-mono">CPU Temp</span>
+                <span class="text-sm font-bold text-yellow-500 font-mono" x-text="status.cpu_temp || '--°C'"></span>
+            </div>
         </div>
-        <div class="bg-card p-4 rounded shadow-sm">
-            <span class="text-[10px] text-gray-500 block uppercase">Gaceta en Proceso</span>
-            <span class="text-[11px] text-gray-300" x-text="agent.pdf"></span>
-        </div>
-        <div class="bg-card p-4 rounded shadow-sm">
-            <span class="text-[10px] text-gray-500 block uppercase">Objetivo ID</span>
-            <span class="text-sm font-bold text-white" x-text="agent.target"></span>
-        </div>
-    </div>
+    </nav>
 
-    <!-- MAIN DATA FEED -->
-    <div class="bg-card rounded overflow-hidden">
-        <div class="p-3 bg-gray-900/50 border-b border-gray-800 flex justify-between">
-            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Base de Datos Nacional (Últimos 50)</span>
-            <span class="text-[10px] text-blue-500" x-text="projects.length + ' registros'"></span>
+    <main class="max-w-7xl mx-auto px-6 pb-12">
+        
+        <!-- TELEMETRY GRID -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="glass p-6 rounded-2xl glow-blue">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Acción en Curso</span>
+                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <div class="text-2xl font-bold text-white tracking-tight" x-text="agent.action">STANDBY</div>
+                <div class="mt-2 text-[10px] font-mono text-slate-500 italic">Loop de monitoreo activo</div>
+            </div>
+
+            <div class="glass p-6 rounded-2xl border-l-4 border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gaceta Fuente</span>
+                    <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <div class="text-sm font-medium text-slate-300 break-all" x-text="agent.pdf || 'Buscando...' "></div>
+                <div class="mt-2 text-[10px] font-mono text-slate-500">Última descarga registrada</div>
+            </div>
+
+            <div class="glass p-6 rounded-2xl border-l-4 border-blue-500">
+                <div class="flex items-center justify-between mb-4">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Objetivo de Extracción</span>
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </div>
+                <div class="text-xl font-bold text-white font-mono" x-text="agent.target || 'NONE'"></div>
+                <div class="mt-2 text-[10px] font-mono text-blue-500">Inyección de prompt en tiempo real</div>
+            </div>
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-left text-[11px]">
-                <thead class="bg-gray-800/20 text-gray-500 uppercase">
-                    <tr>
-                        <th class="p-3">ID_Proyecto</th>
-                        <th class="p-3">Ubicación</th>
-                        <th class="p-3">Promovente</th>
-                        <th class="p-3">Riesgo</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-800/50">
-                    <template x-for="p in projects" :key="p.ID_PROYECTO">
-                        <tr class="hover:bg-blue-900/5 transition-colors" :class="'risk-' + p.RIESGO">
-                            <td class="p-3 font-bold text-blue-400" x-text="p.ID_PROYECTO"></td>
-                            <td class="p-3 text-gray-200" x-text="p.ESTADO + ' - ' + p.MUNICIPIO"></td>
-                            <td class="p-3 text-gray-400 italic" x-text="p.PROMOVENTE"></td>
-                            <td class="p-3 uppercase font-bold text-[9px]" x-text="p.RIESGO"></td>
+
+        <!-- ANALYTICS GRID -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="glass p-4 rounded-2xl flex flex-col justify-between">
+                <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest">Total Analizados</span>
+                <span class="text-4xl font-bold text-white mt-2" x-text="analytics.total || '0'"></span>
+            </div>
+            <!-- Removed Risk Distribution per user request -->
+            <div class="glass p-4 rounded-2xl flex flex-col justify-between md:col-span-2">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest block mb-2">Estados Principales</span>
+                        <template x-for="st in (analytics.top_states || [])">
+                            <div class="flex justify-between text-xs font-mono"><span class="text-blue-400 capitalize" x-text="st[0].toLowerCase()"></span><span class="text-slate-400" x-text="st[1]"></span></div>
+                        </template>
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-widest block mb-2">Promoventes Activos</span>
+                        <template x-for="pr in (analytics.top_promoters || [])">
+                            <div class="flex justify-between text-[10px] font-mono"><span class="text-slate-300 truncate w-32" x-text="pr[0]"></span><span class="text-slate-500" x-text="pr[1]"></span></div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LIVE DATA TABLE -->
+        <div class="glass rounded-3xl overflow-hidden shadow-2xl">
+            <div class="px-8 py-6 border-b border-gray-800 flex justify-between items-center bg-gray-900/30">
+                <div>
+                    <h2 class="text-white font-bold text-lg uppercase tracking-tight flex items-center gap-2">
+                        Base de Datos Nacional 
+                        <span class="text-[10px] bg-blue-900/40 text-blue-400 px-2 py-1 rounded-full font-mono" x-text="projects.length + ' ENTIDADES'"></span>
+                    </h2>
+                    <p class="text-xs text-slate-500 mt-1">Registro estructurado de proyectos de impacto ambiental (PEIA)</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-slate-500 font-mono">ACTUALIZACIÓN AUTOMÁTICA</span>
+                    <div class="w-2 h-2 bg-blue-500 rounded-full pulse-dot"></div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-900/50 text-[10px] text-slate-500 uppercase font-bold tracking-widest">
+                        <tr>
+                            <th class="px-8 py-4">Status</th>
+                            <th class="px-4 py-4">ID_Folio</th>
+                            <th class="px-4 py-4">Estado / Municipio</th>
+                            <th class="px-4 py-4">Promovente</th>
+                            <th class="px-4 py-4">Descripción</th>
                         </tr>
-                    </template>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800/40 bg-gray-900/10">
+                        <template x-for="(p, index) in projects" :key="p.ID_PROYECTO + index">
+                            <tr class="hover:bg-blue-600/5 transition-all duration-300 group">
+                                <td class="px-8 py-4">
+                                    <span class="w-2 h-2 rounded-full block" :class="{
+                                        'bg-zohar-risk-alto shadow-[0_0_8px_#f87171]': p.RIESGO === 'alto',
+                                        'bg-zohar-risk-medio shadow-[0_0_8px_#fbbf24]': p.RIESGO === 'medio',
+                                        'bg-zohar-risk-bajo shadow-[0_0_8px_#34d399]': p.RIESGO === 'bajo' || !p.RIESGO
+                                    }"></span>
+                                </td>
+                                <td class="px-4 py-4 font-mono font-bold text-slate-200 group-hover:text-blue-400" x-text="p.ID_PROYECTO"></td>
+                                <td class="px-4 py-4">
+                                    <div class="text-xs font-semibold text-slate-300 uppercase leading-none" x-text="p.ESTADO"></div>
+                                    <div class="text-[10px] text-slate-500 mt-1 uppercase" x-text="p.MUNICIPIO"></div>
+                                </td>
+                                <td class="px-4 py-4 text-xs font-medium text-slate-400 italic leading-snug max-w-[250px]" x-text="p.PROMOVENTE"></td>
+                                <td class="px-4 py-4 text-xs text-slate-400 max-w-[400px]" x-text="p.DESCRIPCION || '—'"></td>
+                                <!-- Removed Risk column per user request -->
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                <div x-show="projects.length === 0" class="py-20 text-center">
+                    <div class="text-slate-600 animate-pulse">📡 Sincronizando Feed de Datos...</div>
+                </div>
+            </div>
+            
+            <footer class="px-8 py-4 bg-gray-900/40 text-[9px] text-slate-500 flex justify-between font-mono">
+                <div>ZOHAR CORE AGENT V2.1 // AMD OPTIMIZED OPERATIONAL UNIT</div>
+                <div x-text="new Date().toLocaleTimeString()"></div>
+            </footer>
         </div>
-    </div>
+    </main>
 
     <script>
         function dashboard() {
             return {
-                status: {}, agent: {}, projects: [],
-                API_URL: '/api',
+                status: {}, 
+                agent: {}, 
+                projects: [],
+                analytics: {},
+                lastHash: '',
                 init() {
+                    console.log("Iniciando Dashboard...");
                     this.fetchData();
-                    setInterval(() => this.fetchData(), 5000);
+                    // Polling agresivo para pruebas (cada 3 segundos)
+                    setInterval(() => this.fetchData(), 3000);
                 },
                 async fetchData() {
                     try {
-                        const [s, a, p] = await Promise.all([
-                            fetch(`${this.API_URL}/status`).then(r => r.json()),
-                            fetch(`${this.API_URL}/agent_state`).then(r => r.json()),
-                            fetch(`${this.API_URL}/projects`).then(r => r.json())
+                        const baseUrl = window.location.origin;
+                        const [s, a, p, an] = await Promise.all([
+                            fetch(`${baseUrl}/api/status`).then(r => r.json()),
+                            fetch(`${baseUrl}/api/agent_state`).then(r => r.json()),
+                            fetch(`${baseUrl}/api/projects`).then(r => r.json()),
+                            fetch(`${baseUrl}/api/analytics`).then(r => r.json())
                         ]);
+                        
                         this.status = s;
                         this.agent = a;
-                        this.projects = p.reverse();
-                    } catch (e) {}
+                        this.analytics = an;
+                        
+                        // Solo actualizar si la longitud cambió para evitar saltos visuales innecesarios
+                        if (JSON.stringify(p) !== this.lastHash) {
+                            console.log("Nuevos datos recibidos:", p.length);
+                            this.projects = p.reverse(); // Mostrar más recientes primero
+                            this.lastHash = JSON.stringify(p);
+                        }
+                    } catch (e) {
+                        console.error("Error cargando telemetría:", e);
+                    }
+                },
+                async controlAgent(action) {
+                    try {
+                        const baseUrl = window.location.origin;
+                        const resp = await fetch(`${baseUrl}/api/control`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action })
+                        });
+                        const data = await resp.json();
+                        console.log("Control result:", data);
+                        
+                        // Pequeña pausa para que el sistema reaccione antes de actualizar status
+                        setTimeout(() => this.fetchData(), 1500);
+                        
+                        if (data.status === "error") {
+                            alert("Error en el control: " + data.message);
+                        }
+                    } catch (e) {
+                        alert("Error de comunicación: " + e.message);
+                    }
                 }
             }
         }

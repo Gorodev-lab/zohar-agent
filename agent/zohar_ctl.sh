@@ -4,13 +4,16 @@
 #  Uso: ./zohar_ctl.sh [start|start-daemon|stop|status|logs|inspect|retry-failed|dry-run|reset-seen]
 # ══════════════════════════════════════════════
 
-AGENT_SCRIPT="$HOME/zohar-agent/agent/zohar_agent_v2.py"
-INSPECTOR="$HOME/zohar-agent/agent/zohar_queue_inspector.py"
-LOG_FILE="$HOME/zohar-agent/agent/zohar_agent.jsonl"
-QUEUE_FILE="$HOME/zohar-agent/agent/zohar_queue.json"
-SEEN_FILE="$HOME/zohar-agent/agent/zohar_seen_gacetas.json"
+# Determinar el directorio base dinámicamente
+BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+
+AGENT_SCRIPT="$BASE_DIR/agent/zohar_agent_v2.py"
+INSPECTOR="$BASE_DIR/agent/zohar_queue_inspector.py"
+LOG_FILE="$BASE_DIR/agent/zohar_agent.jsonl"
+QUEUE_FILE="$BASE_DIR/agent/zohar_queue.json"
+SEEN_FILE="$BASE_DIR/agent/zohar_seen_gacetas.json"
 PID_FILE="/tmp/zohar_agent_v2.pid"
-VENV="$HOME/zohar_venv"
+VENV="$BASE_DIR/zohar_venv"
 
 CMD=${1:-status}
 
@@ -59,6 +62,16 @@ import zohar_agent_v2 as z
 z.CONFIG['DRY_RUN'] = True
 z.main()
 "
+    ;;
+
+  sweep)
+    # Barrido completo de todos los años configurados
+    _is_running && echo "⚠️  Detén el agente antes: ./zohar_ctl.sh stop" && exit 1
+    _activate
+    echo "🧹 Iniciando barrido histórico (2005-2026)..."
+    nohup python3 "$AGENT_SCRIPT" >> "$LOG_FILE" 2>&1 &
+    echo $! > "$PID_FILE"
+    echo "✅ PID $! — Monitor: ./zohar_ctl.sh logs"
     ;;
 
   stop)
