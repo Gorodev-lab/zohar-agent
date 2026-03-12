@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zohar SRE Lean Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        body { background-color: #0a0c10; color: #c9d1d9; font-family: 'JetBrains Mono', monospace; }
+        .bg-card { background-color: #0d1117; border: 1px solid #30363d; }
+        .risk-alto { color: #ff7b72; border-left: 3px solid #ff7b72; }
+        .risk-medio { color: #d29922; border-left: 3px solid #d29922; }
+        .risk-bajo { color: #3fb950; border-left: 3px solid #3fb950; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #30363d; }
+    </style>
+</head>
+<body class="p-4 md:p-10" x-data="dashboard()">
+    <header class="flex justify-between items-end mb-10 border-b border-gray-800 pb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white tracking-tighter">ZOHAR_SRE_LEAN</h1>
+            <p class="text-xs text-gray-500 mt-1">NATIONAL_MONITORING_PIPELINE_V5.0</p>
+        </div>
+        <div class="text-[10px] text-right space-y-1 font-mono">
+            <div class="text-yellow-500">CPU_TEMP: <span x-text="status.cpu_temp"></span></div>
+            <div class="text-green-500">ENGINE: <span x-text="status.llama_status"></span></div>
+        </div>
+    </header>
+
+    <!-- ACTIVE TELEMETRY -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+        <div class="bg-card p-4 rounded shadow-sm border-l-2 border-blue-500">
+            <span class="text-[10px] text-gray-500 block uppercase">Acción Actual</span>
+            <span class="text-sm font-bold text-blue-400" x-text="agent.action"></span>
+        </div>
+        <div class="bg-card p-4 rounded shadow-sm">
+            <span class="text-[10px] text-gray-500 block uppercase">Gaceta en Proceso</span>
+            <span class="text-[11px] text-gray-300" x-text="agent.pdf"></span>
+        </div>
+        <div class="bg-card p-4 rounded shadow-sm">
+            <span class="text-[10px] text-gray-500 block uppercase">Objetivo ID</span>
+            <span class="text-sm font-bold text-white" x-text="agent.target"></span>
+        </div>
+    </div>
+
+    <!-- MAIN DATA FEED -->
+    <div class="bg-card rounded overflow-hidden">
+        <div class="p-3 bg-gray-900/50 border-b border-gray-800 flex justify-between">
+            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Base de Datos Nacional (Últimos 50)</span>
+            <span class="text-[10px] text-blue-500" x-text="projects.length + ' registros'"></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-[11px]">
+                <thead class="bg-gray-800/20 text-gray-500 uppercase">
+                    <tr>
+                        <th class="p-3">ID_Proyecto</th>
+                        <th class="p-3">Ubicación</th>
+                        <th class="p-3">Promovente</th>
+                        <th class="p-3">Riesgo</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800/50">
+                    <template x-for="p in projects" :key="p.ID_PROYECTO">
+                        <tr class="hover:bg-blue-900/5 transition-colors" :class="'risk-' + p.RIESGO">
+                            <td class="p-3 font-bold text-blue-400" x-text="p.ID_PROYECTO"></td>
+                            <td class="p-3 text-gray-200" x-text="p.ESTADO + ' - ' + p.MUNICIPIO"></td>
+                            <td class="p-3 text-gray-400 italic" x-text="p.PROMOVENTE"></td>
+                            <td class="p-3 uppercase font-bold text-[9px]" x-text="p.RIESGO"></td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function dashboard() {
+            return {
+                status: {}, agent: {}, projects: [],
+                API_URL: '/api',
+                init() {
+                    this.fetchData();
+                    setInterval(() => this.fetchData(), 5000);
+                },
+                async fetchData() {
+                    try {
+                        const [s, a, p] = await Promise.all([
+                            fetch(`${this.API_URL}/status`).then(r => r.json()),
+                            fetch(`${this.API_URL}/agent_state`).then(r => r.json()),
+                            fetch(`${this.API_URL}/projects`).then(r => r.json())
+                        ]);
+                        this.status = s;
+                        this.agent = a;
+                        this.projects = p.reverse();
+                    } catch (e) {}
+                }
+            }
+        }
+    </script>
+</body>
+</html>

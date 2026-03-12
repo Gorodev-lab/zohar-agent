@@ -1,0 +1,35 @@
+# Archivos generados en runtime (no versionar)
+~/gaceta_work/
+~/zohar_historico_proyectos.csv
+~/zohar_grafo.triples
+~/zohar_agent_state.json
+~/zohar_api.log
+~/zohar_server.log
+
+# Queue y logs del agente (opcionales — útiles para debug pero no para versionar)
+agent/zohar_queue.json
+agent/zohar_seen_gacetas.json
+agent/zohar_agent.jsonl
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+zohar_venv/
+
+# Modelos LLM (muy pesados)
+*.gguf
+*.bin
+models/
+
+# PDFs y documentos descargados
+gaceta_work/
+documentos/
+
+# Temporales
+*.tmp
+*.log
+.DS_Store
