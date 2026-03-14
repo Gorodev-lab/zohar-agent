@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║  ZOHAR AGENT v2.1 — NATIONAL MONITORING PIPELINE                ║
-║  AMD A8 Optimized · Stdlib only (sin dependencias externas)     ║
+║  ZOHAR AGENT v2.2 — NATIONAL MONITORING PIPELINE                ║
+║  Ryzen 5 Optimized · Advanced Extraction Architecture           ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 FLUJO PRINCIPAL:
@@ -26,7 +26,25 @@ from dataclasses import dataclass, asdict, field
 from typing import Optional
 
 try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
+    from supabase import create_client, Client
+    SUPABASE_URL = os.environ.get("SUPABASE_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+    supabase_client = None
+    if SUPABASE_URL and SUPABASE_KEY:
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except ImportError:
+    supabase_client = None
+
+try:
     import pandas as pd
+    import base64
+    from pdf2image import convert_from_path
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.chrome.options import Options
@@ -51,9 +69,13 @@ CONFIG = {
     "SEEN_FILE":    AGENT_DIR / "zohar_seen_gacetas.json",  # hash de gacetas ya procesadas
     "GRAPH_FILE":   HOME / "zohar_grafo.triples",
 
-    # Llama server (Qwen 2.5 1.5B)
-    "MOTOR_URL":    "http://127.0.0.1:8001/v1/chat/completions",
-    "MODEL":        "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    # Llama server (Qwen 1.5B / Mistral / Granite)
+    "LLAMA_URL":    os.environ.get("LLAMA_URL", "http://127.0.0.1:8001/v1/chat/completions"),
+    "LLAMA_HEALTH": os.environ.get("LLAMA_HEALTH", "http://127.0.0.1:8001/v1/models"),
+    "OCR_URL":      os.environ.get("OCR_URL", "http://127.0.0.1:8002/v1/chat/completions"),
+    "MODEL":        os.environ.get("ZOHAR_MODEL", "granite-3.0-8b-instruct-Q4_K_M.gguf"),
+    "TEMPERATURE":  float(os.environ.get("ZOHAR_TEMP", "0.2")),
+    "MAX_TOKENS":   int(os.environ.get("ZOHAR_MAX_TOKENS", "1000")),
 
     # SEMARNAT — IMPORTANTE: HTTP puro (no HTTPS), el servidor usa :8080
     "GACETA_LIST_URL":  "http://sinat.semarnat.gob.mx/Gaceta/gacetapublicacion/?ai={year}",
@@ -68,10 +90,8 @@ CONFIG = {
     "COOL_DOWN_HOT":     20,
     "TEMP_WARN":         76.0,
     "TEMP_CRIT":         85.0,
-    "LLAMA_TIMEOUT":     35,
-    "MAX_TOKENS":        600,        # Suficiente para descripción técnica y razonamiento CoT
-    "TEMPERATURE":       0.1,
-    "CONTEXT_CHARS":     3200,     # Proporcionar más fragmento a la IA
+    "LLAMA_TIMEOUT":     600, # Tolerancia máxima para inferencia completa
+    "CONTEXT_CHARS":     6000, # Aumentar el contexto alimenta mejor el insight descriptivo
 
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,      # minutos entre chequeos de nuevas gacetas
@@ -159,10 +179,25 @@ class PersistentQueue:
                 self._d = {}
 
     def save(self):
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({k: asdict(v) for k, v in self._d.items()},
-                                  indent=2, ensure_ascii=False))
-        tmp.replace(self.path)
+        try:
+            tmp = self.path.with_suffix(".tmp")
+            # Convertir a JSON una sola vez para eficiencia
+            content = json.dumps({k: asdict(v) for k, v in self._d.items()}, 
+                                indent=2, ensure_ascii=False)
+            
+            # Escritura robusta con sync (atómica)
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            
+            # Reemplazo solo si el archivo existe
+            if tmp.exists():
+                tmp.replace(self.path)
+            else:
+                log.error(f"  ⚠️  Fallo crítico al guardar cola: {tmp} no se generó.")
+        except Exception as e:
+            log.error(f"  ❌ Error de I/O al guardar cola: {e}")
 
     def add(self, pid, pdf, year, txt_file) -> bool:
         if pid in self._d:
@@ -172,8 +207,11 @@ class PersistentQueue:
         return True
 
     def pending(self) -> list[QueueItem]:
-        return [i for i in self._d.values()
+        """Retorna items pendientes ordenados de forma descendente (2026 primero)."""
+        items = [i for i in self._d.values()
                 if i.status == "pending" and i.attempts < CONFIG["MAX_RETRIES"]]
+        # Ordenar por año de mayor a menor
+        return sorted(items, key=lambda x: x.year, reverse=True)
 
     def mark_success(self, pid: str):
         if pid in self._d:
@@ -278,18 +316,24 @@ def thermal_wait(log: logging.Logger):
 # LLAMA SERVER WATCHDOG
 # ─────────────────────────────────────────────────────────
 def wait_for_llama(log: logging.Logger, max_wait: int = 90) -> bool:
-    health = "http://127.0.0.1:8001/health"
+    """
+    Verifica disponibilidad del llama-server usando /v1/models.
+    NOTA: llama-cpp-python NO expone /health — usar /v1/models (200 = listo).
+    """
+    health = CONFIG["LLAMA_HEALTH"]  # /v1/models — compatible con llama-cpp-python
     for i in range(max_wait // 5):
         try:
-            with urllib.request.urlopen(health, timeout=4) as r:
+            with urllib.request.urlopen(health, timeout=30) as r:
                 if r.status == 200:
+                    if i > 0:
+                        log.info("LLM infrastructure validation successful")
                     return True
         except Exception:
             pass
         if i == 0:
-            log.warning("⏳ llama-server no responde, esperando...")
+            log.warning("LLM service latency detected - pending response...")
         time.sleep(5)
-    log.error("❌ llama-server no disponible")
+    log.error("LLM service unavailable (verify: curl http://127.0.0.1:8001/v1/models)")
     return False
 
 
@@ -338,64 +382,40 @@ def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[s
     """
     url = CONFIG["GACETA_LIST_URL"].format(year=year)
     report_state("—", "MONITOREANDO", f"Gaceta {year} (Selenium)")
-    log.info(f"🔍 Verificando Gaceta {year} con Webdriver: {url}")
-
-    html = ""
-    try:
-        # Configurar Selenium Chromium Headless
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.binary_location = '/usr/bin/google-chrome-stable'
-        
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(60)
-        driver.get(url)
-        time.sleep(3) # Esperar a que renderice JS
-        html = driver.page_source
-        driver.quit()
-    except Exception as e:
-        log.warning(f"⚠️ Fallo en Selenium, usando fallback HTTP: {e}")
-        html = http_get(url, timeout=60)
-        if html is None:
-            log.warning(f"  ⚠️ No se pudo acceder a la Gaceta {year}")
+    log.info(f"🔍 Verificando Gaceta {year} (HTTP First): {url}")
+    html = http_get(url, timeout=60)
+    
+    if html is None or "document.write" in html or len(html) < 500:
+        log.warning(f"  ⚠️ HTTP insuficiente o JS detectado, usando Selenium (Heavy)...")
+        try:
+            # Configurar Selenium Chromium Headless
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            # Configuración Robusta para Arch Linux
+            chrome_options.binary_location = '/usr/bin/google-chrome-stable'
+            
+            # Usar binario local para evitar esperas de descarga
+            driver_path = "/usr/bin/chromedriver"
+            if not os.path.exists(driver_path): driver_path = "/usr/local/bin/chromedriver"
+            
+            service = Service(executable_path=driver_path)
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.set_page_load_timeout(45) # Reducir para evitar bloqueos
+            driver.set_script_timeout(15)
+            
+            log.info(f"  🌐 Abriendo Gaceta {year}...")
+            driver.get(url)
+            time.sleep(5) # Esperar renderizado dinámico
+            html = driver.page_source
+            driver.quit()
+        except Exception as e:
+            log.warning(f"  ❌ Fallo total: no se pudo acceder a la Gaceta {year} ({e})")
             return []
 
     if html is None or html == "":
         return []
-
-    changed = seen.has_changed(year, html)
-    if not changed:
-        log.info(f"  ✅ Sin cambios en Gaceta {year}")
-        return []
-
-    log.info(f"  🆕 ¡Cambio detectado en Gaceta {year}! Extrayendo PDFs...")
-
-    # Extraer todos los links .pdf del HTML
-    pdf_links = re.findall(r'https?://[^\s"\'<>]+\.pdf', html)
-    # También buscar patrones relativos
-    rel_links  = re.findall(r'href=["\']([^"\']+\.pdf)["\']', html)
-    base       = CONFIG["GACETA_PDF_BASE"].format(year=year)
-    for rl in rel_links:
-        if rl.startswith("http"):
-            pdf_links.append(rl)
-        else:
-            pdf_links.append(base + rl.lstrip("/"))
-
-    # FALLBACK si Selenium no pudo cargar los links por protecciones anti-bot
-    if len(pdf_links) == 0:
-        log.warning(f"⚠️ Selenium no encontró PDFs. Intentando con request HTTP directo...")
-        html_fb = http_get(url, timeout=60)
-        if html_fb:
-            pdf_links = re.findall(r'https?://[^\s"\'<>]+\.pdf', html_fb)
-            rel_links  = re.findall(r'href=["\']([^"\']+\.pdf)["\']', html_fb)
-            for rl in rel_links:
-                if rl.startswith("http"):
-                    pdf_links.append(rl)
-                else:
-                    pdf_links.append(base + rl.lstrip("/"))
 
     # Usar pandas para la deduplicación y limpieza, asegurando que la info está "aterrizada"
     try:
@@ -414,12 +434,22 @@ def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[s
 # PASO 2: DISCOVER — descargar PDF, extraer IDs
 # ─────────────────────────────────────────────────────────
 def pid_in_csv(pid: str) -> bool:
+    """Busca el PID solo en la segunda columna del CSV (índice 1) para precisión."""
     p = CONFIG["CSV_FILE"]
     if not p.exists():
         return False
     try:
-        return pid in p.read_text()
-    except Exception:
+        # Usar set local de caché para velocidad si el archivo es grande
+        # Para sistemas con 13GB RAM, leer la columna completa es trivial
+        with open(p, "r", encoding="utf-8", errors="ignore") as f:
+            reader = csv.reader(f)
+            next(reader, None) # Saltar cabecera
+            for row in reader:
+                if len(row) > 1 and row[1].strip() == pid.strip():
+                    return True
+        return False
+    except Exception as e:
+        log.error(f"  ⚠️ Error verificando PID en CSV: {e}")
         return False
 
 def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
@@ -492,8 +522,11 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
     
     raw_state = str(data.get("estado", "")).upper().strip()
     raw_mun   = str(data.get("municipio", "")).upper().strip()
+    raw_loc   = str(data.get("localidad", "")).upper().strip() # Quitamos el fallback default a CABECERA MUNICIPAL
     raw_proj  = str(data.get("proyecto", "")).upper().strip()
     raw_prom  = str(data.get("promovente", "")).upper().strip()
+    raw_coord = str(data.get("coordenadas", "")).strip()
+    raw_poly  = str(data.get("poligono", "")).strip()
     
     # 2. Forzar Estado correcto según los 2 primeros dígitos del PID (Standard SEMARNAT)
     state_code = pid[:2]
@@ -501,162 +534,267 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
         data["estado"] = STATE_CODES[state_code]
     
     # 3. Limpieza de ruido tabular agresiva (Headers que se filtran)
-    # Lista de sub-strings que indican que el valor extraído es un encabezado de tabla, no un dato.
     noise_terms = [
         "EL ID", "ID_PROYECTO", "ID PROYECTO", "CLAVE", "MODALIDAD", "FECHA", 
         "INGRESO", "PROMOVENTE", "PROYECTO", "ESTADO", "MUNICIPIO", "NUMERO",
-        "DETALLES", "BITACORA", "REGISTRO", "PUBLICACION"
+        "DETALLES", "BITACORA", "REGISTRO", "PUBLICACION", "CABECERA MUNICIPAL",
+        "NOMBRE ESPECIFICO", "BUSCA EL NOMBRE"
     ]
     
     def is_noise(text: str) -> bool:
         text_up = text.upper()
-        # Si el texto es idéntico a un header o contiene demasiados términos de header
         if text_up in noise_terms: return True
-        # Si la longitud es mínima
         if len(text_up.replace(" ", "")) <= 2: return True
-        # Detección de "EL ID" con regex
+        # Si el texto contiene instrucciones del prompt, es basura
+        if "EVITA" in text_up or "NOMBRE ESPECIFICO" in text_up: return True
         if re.search(r'^(EL\s+)?ID(_PROYECTO)?$', text_up): return True
         return False
 
     # Limpiar Municipio
-    if is_noise(raw_mun):
+    if is_noise(raw_mun) or raw_mun in ["GENERICO", "GENÉRICO", "NONE", "CABECERA MUNICIPAL"]:
         data["municipio"] = ""
     else:
-        # Corregir municipios con prefijos
-        prefixes = ["LOS", "LA", "EL", "LAS", "SAN", "SANTA", "SANTO", "VALLE DE", "DE"]
         mun = raw_mun
-        if raw_state in prefixes and mun and not mun.startswith(raw_state):
-            mun = f"{raw_state} {mun}"
-        
-        # Correcciones específicas comunes
+        # Eliminar términos genéricos que no son nombres
+        generic_terms = ["CABECERA MUNICIPAL", "MUNICIPIO", "GENERICO", "GENÉRICO", "VARIOS", "ESTADO"]
+        if any(term == mun for term in generic_terms):
+            mun = ""
+
+        # En esta versión, si no hay municipio claro, se queda vacío.
         corrections = {
             "CABOS": "LOS CABOS", "PAZ": "LA PAZ", "BRAVO": "VALLE DE BRAVO",
             "ANDRÉS": "SAN ANDRÉS", "PEDRO": "SAN PEDRO", "CRISTÓBAL": "SAN CRISTÓVAL",
-            "DEL CARMEN": "PLAYA DEL CARMEN"
+            "DEL CARMEN": "PLAYA DEL CARMEN", "JUÁREZ": "BENITO JUÁREZ"
         }
         for k, v in corrections.items():
             if mun == k: mun = v
             
-        data["municipio"] = mun
+        # Intento de rescate si está vacío: buscar en proyecto o descripción
+        if not mun:
+            context_text = (raw_proj + " " + str(data.get("descripcion", ""))).upper()
+            m_mun = re.search(r'MUNICIPIO\s+(?:DE\s+)?([A-Z\xC0-\xDF\s]{3,30})(?:,|\.|\s+EN|$)', context_text)
+            if m_mun:
+                mun = m_mun.group(1).strip()
 
-    # Limpiar Proyecto (Si parece un encabezado de tabla, usar la descripción o marcar como error)
+        data["municipio"] = mun
+    
+    # Limpiar Localidad
+    if is_noise(raw_loc) or raw_loc in ["NONE", "NULL", "DESCONOCIDO", "CABECERA MUNICIPAL", ""]:
+        data["localidad"] = "" # No forzar CABECERA MUNICIPAL
+    else:
+        data["localidad"] = raw_loc
+
+    # Limpiar Proyecto
     if is_noise(raw_proj) or any(term in raw_proj for term in ["PROMOVENTE", "FECHA DE INGRESO"]):
         data["proyecto"] = "PROYECTO EN EVALUACIÓN"
     
     # Limpiar Promovente
-    if is_noise(raw_prom):
+    if is_noise(raw_prom) or "NOMBRE LEGAL" in raw_prom.upper():
         data["promovente"] = "DESCONOCIDO"
+    else:
+        data["promovente"] = raw_prom
+
+    # Limpiar Coordenadas y Polígono
+    if is_noise(raw_coord) or raw_coord.upper() in ["NONE", "NULL", "DESCONOCIDO"]:
+        data["coordenadas"] = ""
+    else:
+        data["coordenadas"] = raw_coord
+
+    if is_noise(raw_poly) or raw_poly.upper() in ["NONE", "NULL", "DESCONOCIDO"]:
+        data["poligono"] = ""
+    else:
+        data["poligono"] = raw_poly
     
-    # Si la descripción es genérica, basura o muy corta, usar el título del proyecto
-    desc = str(data.get("descripcion", "")).strip()
-    # Si la IA devuelve algo muy corto o con puntos suspensivos, es un fallo
-    if not desc or len(desc) < 20 or desc == "..." or "AUTOMÁTICA" in desc.upper():
+    # Si la descripción (insight) es genérica, basura o muy corta, usar el título del proyecto
+    desc = str(data.get("insight", data.get("descripcion", ""))).strip()
+    # Si la IA devuelve algo muy corto o con instrucciones del prompt
+    is_placeholder = any(x in desc.upper() for x in ["EXTRACCIÓN AUTOMÁTICA", "SIN DETALLES", "FALLÓ", "ULTRA PRECIS"])
+    if not desc or len(desc) < 30 or desc == "..." or is_placeholder or "MIGRADO" in desc.upper():
         proj_title = str(data.get("proyecto", ""))
+        state_name = data.get("estado", "MÉXICO")
         if len(proj_title) > 30:
-             data["descripcion"] = f"Análisis técnico: {proj_title[:150]}..."
+             data["insight"] = f"Análisis técnico del proyecto: {proj_title[:150]}..."
         else:
-             data["descripcion"] = f"Evaluación de Manifestación de Impacto Ambiental para el proyecto en {data.get('estado')}"
+             data["insight"] = f"Evaluación de Manifestación de Impacto Ambiental para el proyecto {proj_title} en {state_name}. Se requiere revisión manual de confidencialidad."
+    else:
+        data["insight"] = desc
              
-    # LOG DE SEGURIDAD
-    # log.debug(f"      Normalized {pid}: Mun='{data['municipio']}' Desc='{data['descripcion'][:30]}...'")
-    
     # 4. Limpieza general
     for k in data:
         if isinstance(data[k], str):
             val = data[k]
-            # Eliminar "PROMOVIDO POR...", "ESTADO DE...", y ruidos de metadatos
             val = re.sub(r'(?i)PROMOVIDO POR.*', '', val)
             val = re.sub(r'(?i)ESTADO DE\s+', '', val)
             val = re.sub(r'(?i)MUNICIPIO DE\s+', '', val)
-            # Limpiar espacios múltiples y mayúsculas (excepto descripción que es mixta)
             val = re.sub(r'\s+', ' ', val).strip()
-            if k != "descripcion":
+            if k not in ["descripcion", "insight", "coordenadas", "poligono"]:
                 val = val.upper()
             data[k] = val
     
     return data
 
+
+def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict:
+    """
+    PASO 3.5: Digital Twin Grounding (Estrategia 1).
+    Aterriza y verifica la calidad usando los datos oficiales del portal SEMARNAT.
+    """
+    if not portal_data:
+        return extracted
+
+    # Mapeo de campos SEMARNAT API -> Zohar Schema
+    grounding_map = {
+        "proyecto":   ["proyecto", "titulo", "nomProyecto", "nombreProyecto"],
+        "promovente": ["promovente", "nomPromovente", "nombrePromovente"],
+        "estado":     ["estado", "entidadFederativa", "nomEntidad", "nomEstado"],
+        "municipio":  ["municipio", "nomMunicipio", "nombreMunicipio", "ubicacionMunicipio"]
+    }
+
+    for target, portal_keys in grounding_map.items():
+        official_val = None
+        for k in portal_keys:
+            if val := portal_data.get(k):
+                official_val = str(val).strip()
+                if official_val.upper() not in ["DESCONOCIDO", "", "NULL", "NONE"]:
+                    break
+                official_val = None
+        
+        if official_val:
+            ai_val = str(extracted.get(target) or "").strip()
+            # Si hay discrepancia o la IA cortó la palabra, preferimos el portal
+            if (ai_val.upper() != official_val.upper()) or (len(official_val) > len(ai_val) and len(ai_val) < 10):
+                if len(ai_val) > 3:
+                    log.debug(f"    🔗 Grounding {target}: '{ai_val}' -> '{official_val}'")
+                extracted[target] = official_val
+    
+    return extracted
+
+# Prompt Chaining - Paso 1: Ubicar contexto específico de ubicación
+LOCATION_FINDER_PROMPT = """\
+<instruction>
+Eres un perito experto en lectura de gacetas SEMARNAT. Tu objetivo es encontrar el fragmento exacto que describe la ubicación de un proyecto.
+</instruction>
+
+<task>
+Busca en el texto el proyecto con ID {pid}. 
+Extrae ÚNICAMENTE el fragmento de texto (oración o tabla) donde se menciona el ESTADO y el MUNICIPIO o LOCALIDAD de este proyecto específico.
+</task>
+
+<context>
+{context}
+</context>
+
+Si no encuentras el municipio pero sí el estado, copia el fragmento del estado.
+Responde SOLAMENTE con el fragmento hallado. Si no hay nada claro, responde "NO_HALLADO".
+"""
+
+# Prompt Chaining - Paso 2: Extracción estructurada avanzada (Meta-Prompt Arquitectura v3.0)
 EXTRACTION_PROMPT = """\
 <system_instruction>
-Eres un investigador experto de nivel doctoral especializado en ingeniería de datos estructurados, procesamiento avanzado de lenguaje natural (NLP) y análisis forense de documentos gubernamentales mexicanos (específicamente la Gaceta Ecológica y Manifestaciones de Impacto Ambiental de SEMARNAT). 
-
-Tu tarea crítica y exclusiva es extraer información estructurada y prístina a partir de texto crudo, severamente ruidoso y desestructurado, proveniente de PDFs escaneados (OCR) que sufren de degradación topológica y tablas rotas.
-
-Debes aplicar un rigor analítico metodológico extremo para diferenciar categóricamente entre "Metadatos/Encabezados de Tabla rotos" y "Valores de Datos Reales de Proyectos". Eres totalmente inmune a las trampas de proximidad espacial en el texto.
+Eres un Investigador Senior de la SEMARNAT y Data Scientist experto en ingeniería de datos y análisis forense de documentos gubernamentales. 
+Tu tarea es extraer información prístina de texto extremadamente ruidoso (OCR degradado).
+Eres totalmente inmune a las trampas de proximidad espacial como la anomalía "EL ID" y detectas encabezados rotos como basura estructural.
 </system_instruction>
 
 <schema_definition>
-Debes extraer la información requerida del texto y poblar de manera estricta el siguiente esquema de salida JSON. No inventes campos nuevos.
-{{
-  "PROMOVENTE": "El nombre corporativo de la empresa, persona física o entidad gubernamental que propone y financia el proyecto ambiental.",
-  "PROYECTO": "El nombre formal y oficial del proyecto tal y como está registrado en el documento.",
-  "ESTADO": "El nombre oficial y normativo de la entidad federativa de México (Ej. CAMPECHE, SONORA, BAJA CALIFORNIA SUR). NUNCA uses abreviaturas ni artículos sueltos erróneos como 'EL' o 'LA'.",
-  "MUNICIPIO": "El nombre oficial del municipio correspondiente. Debe existir y tener coherencia geográfica comprobada con el ESTADO asignado.",
-  "RIESGO": "Nivel de impacto ambiental detectado (bajo, medio, alto).",
-  "DESCRIPCION": "Un resumen técnico y analítico de las características de la obra. NUNCA debe ser igual al nombre del proyecto ni quedar vacío."
-}}
+{
+  "PROMOVENTE": "Nombre legal exacto de la empresa o entidad.",
+  "PROYECTO": "Nombre oficial del proyecto.",
+  "ESTADO": "Entidad federativa (INEGI). NUNCA uses abreviaturas.",
+  "MUNICIPIO": "Nombre específico del municipio (DÉJALO VACÍO si no aparece el nombre propio).",
+  "LOCALIDAD": "Localidad o sitio específico (o vacío).",
+  "COORDENADAS": "Lat/Lon precisely si aparecen.",
+  "POLIGONO": "Vértices/Geometría si aparece.",
+  "SECTOR": "Uno de: [ENERGÍA, MINERÍA, TURISMO, INFRAESTRUCTURA, HIDROCARBUROS, AGROINDUSTRIA, OTROS].",
+  "INSIGHT": "Resumen técnico de 2-3 oraciones iniciando OBLIGATORIAMENTE con un VERBO DE ACCIÓN (Ej: Construcción, Operación, Modernización...)."
+}
 </schema_definition>
 
 <extraction_rules>
-Para garantizar una extracción de datos de altísima fidelidad, debes interiorizar y obedecer estrictamente las siguientes reglas procedimentales inviolables:
-
-1. EVASIÓN ABSOLUTA DE RUIDO Y ENCABEZADOS (RESOLUCIÓN DEL PROBLEMA "EL ID"):
-   - El texto fuente de entrada proviene de tablas PDF que han sido aplanadas a texto plano. Por consiguiente, encabezados de columna como "EL ID", "ID_PROYECTO", "CLAVE", "MODALIDAD", o "FECHA DE INGRESO" aparecerán caóticamente mezclados con los datos reales de los proyectos.
-   - REGLA CRÍTICA DE RECHAZO: "EL ID" NO ES BAJO NINGUNA CIRCUNSTANCIA UN MUNICIPIO O ESTADO MEXICANO. "ID_PROYECTO" NO ES UN MUNICIPIO. Si tus sensores de lectura detectan estas combinaciones de palabras cerca de etiquetas geográficas, ignóralas por completo al buscar ubicaciones. Son, sin excepción, basura estructural resultante del OCR.
-
-2. PROTOCOLO DE VALIDACIÓN SEMÁNTICA GEOGRÁFICA (TAXONOMÍA INEGI):
-   - Los valores asignados a los campos ESTADO y MUNICIPIO deben existir factual y normativamente en la geografía física mexicana y en el Catálogo de Claves de Entidades Federativas y Municipios del INEGI.
-   - Si extraes "EL" o iniciales aisladas como estado, se considerará un error fatal de procesamiento. Un estado legítimo es "CAMPECHE", "YUCATÁN", "JALISCO", etc.
-   - Validación cruzada interna obligatoria: Pregúntate internamente, ¿El municipio que estoy a punto de extraer realmente pertenece al estado que he extraído? (Ej. Si el estado es Sonora, el municipio no puede ser Cozumel). Si hay una incongruencia, el texto está roto; debes seguir buscando en el contexto más amplio la alineación geográfica correcta.
-
-3. INGENIERÍA Y SÍNTESIS DE LA DESCRIPCIÓN MEDIANTE VERBOS DE ACCIÓN (ABSTRACTIVE SUMMARIZATION):
-   - El campo DESCRIPCION no puede ser bajo ninguna circunstancia simplemente una reiteración perezosa del nombre del proyecto. Está estrictamente prohibido que quede vacío o se complete con un guion ("—").
-   - DEBE comenzar siempre y de manera obligatoria con un sustantivo o gerundio derivado de un verbo de acción técnica e ingenieril (Ej: "Construcción...", "Operación y mantenimiento de...", "Ampliación de la infraestructura de...", "Instalación de...", "Aprovechamiento forestal sustentable para...").
-   - Tienes el mandato de leer profundamente los párrafos adyacentes al título para extraer detalles y parámetros técnicos valiosos (superficie de afectación en hectáreas, tipo específico de infraestructura, capacidad operativa de las plantas, voltajes, etc.) y sintetizar todo este conocimiento en un bloque narrativo conciso de 2 a 3 oraciones completas.
+1. EVASIÓN DEL RUIDO "EL ID": "EL ID" NO ES UN MUNICIPIO. Ignora etiquetas de encabezado.
+2. VALIDACIÓN GEOGRÁFICA: El MUNICIPIO debe existir y coincidir con el ESTADO.
+3. VERBOS DE ACCIÓN: El INSIGHT debe describir el 'qué' técnico, no solo repetir el título.
 </extraction_rules>
 
 <contrastive_examples>
   <negative_example_anti_pattern>
     <texto_crudo_simulado>
-    NUMERO 04 EL ID 02BC2024HD010 ESTADO QUINTANA ROO PROYECTO TREN MAYA TRAMO 5 SUR MUNICIPIO EL ID PROMOVENTE FONDO NACIONAL DE FOMENTO AL TURISMO DESCRIPCION TREN MAYA TRAMO 5 SUR INGRESO A EVALUACION EL DIA
+    NUMERO 04 EL ID 02BC2024HD010 ESTADO QUINTANA ROO PROYECTO TREN MAYA TRAMO 5 MUNICIPIO EL ID PROMOVENTE FONATUR
     </texto_crudo_simulado>
-    <error_analysis_and_correction>
-    1. Error Geográfico: Extraer "EL ID" como municipio es un fallo crítico. 
-    2. Error Descriptivo: Repetir el título es inaceptable.
-    </error_analysis_and_correction>
+    <error_analysis>
+    El modelo fallaría al extraer "EL ID" como municipio por proximidad. "EL ID" es basura de tabla.
+    </error_analysis>
   </negative_example_anti_pattern>
 
   <positive_example_correct_extraction>
     <texto_crudo_simulado>
-    TRAMITE NUMERO 04 EL ID 23QR2023TD099 ESTADO QUINTANA ROO PROYECTO DESARROLLO TURISTICO ESMERALDA MUNICIPIO SOLIDARIDAD PROMOVENTE INMOBILIARIA CARIBE S.A. DE C.V. El proyecto busca el cambio de uso de suelo en 15.4 hectáreas para un complejo hotelero de 400 habitaciones.
+    TRAMITE NUMERO 04 EL ID 23QR2023TD099 ESTADO QUINTANA ROO PROYECTO DESARROLLO TURISTICO ESMERALDA MUNICIPIO SOLIDARIDAD PROMOVENTE INMOBILIARIA CARIBE S.A. DE C.V. 
+    El proyecto contempla el cambio de uso de suelo para un desarrollo hotelero de 400 habitaciones en 15 hectáreas.
     </texto_crudo_simulado>
+    <razonamiento>
+    Identifiqué "EL ID" como ruido. Ubiqué "QUINTANA ROO" como estado y validé que "SOLIDARIDAD" es un municipio válido en ese estado. El insight inicia con el verbo "Construcción".
+    </razonamiento>
     <output_json>
-    {{
+    {
       "PROMOVENTE": "INMOBILIARIA CARIBE S.A. DE C.V.",
       "PROYECTO": "DESARROLLO TURISTICO ESMERALDA",
       "ESTADO": "QUINTANA ROO",
       "MUNICIPIO": "SOLIDARIDAD",
-      "RIESGO": "alto",
-      "DESCRIPCION": "Construcción de un complejo hotelero con capacidad para 400 habitaciones, el cual requiere autorizaciones para el cambio de uso de suelo en terrenos forestales abarcando una superficie de 15.4 hectáreas."
-    }}
+      "LOCALIDAD": "PLAYA DEL CARMEN",
+      "SECTOR": "TURISMO",
+      "INSIGHT": "Construcción de un desarrollo hotelero de 400 habitaciones que requiere el cambio de uso de suelo en 15 hectáreas de vegetación forestal."
+    }
     </output_json>
   </positive_example_correct_extraction>
 </contrastive_examples>
 
-<execution_instructions>
-Paso 1: Genera el bloque <razonamiento> analizando el contexto del proyecto {pid}.
-Paso 2: Genera el bloque <output_json> estrictamente con el esquema definido.
-</execution_instructions>
+<location_context_snippet>
+{location_snippet}
+</location_context_snippet>
 
-<texto_gaceta_crudo>
+<full_text_context>
 {context}
-</texto_gaceta_crudo>
+</full_text_context>
+
+INSTRUCCIÓN FINAL:
+Genera primero un bloque <razonamiento> y luego ESTRÍCTAMENTE un bloque <output_json>.
+SI NO ENCUENTRAS EL MUNICIPIO REAL, DEJA EL CAMPO "MUNICIPIO" VACÍO ("").
 """
 
 
 
-def extract_with_ai(pid: str, context: str, log: logging.Logger) -> Optional[dict]:
-    prompt = EXTRACTION_PROMPT.format(pid=pid, context=context[:CONFIG["CONTEXT_CHARS"]])
+
+def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
+    """
+    Implementa Prompt Chaining para extraer datos con precisión:
+    Paso 1: Localizar el fragmento de ubicación relevante.
+    Paso 2: Realizar la extracción técnica completa usando el fragmento localizado.
+    """
+    
+    # --- PASO 1 del CHAIN: Localizar el snippet de ubicación ---
+    find_payload = json.dumps({
+        "model": CONFIG["MODEL"],
+        "messages": [{"role": "user", "content": LOCATION_FINDER_PROMPT.format(pid=pid, context=context[:2000])}],
+        "temperature": 0.0,
+        "max_tokens": 150
+    }).encode("utf-8")
+    
+    location_snippet = "No se halló snippet específico"
+    try:
+        req = urllib.request.Request(CONFIG["LLAMA_URL"], data=find_payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=CONFIG["LLAMA_TIMEOUT"]) as resp:
+            location_snippet = json.loads(resp.read())["choices"][0]["message"]["content"].strip()
+            log.debug(f"    Locality Context Signal {pid}: {location_snippet[:100]}...")
+    except Exception as e:
+        log.warning(f"    Inference Sequence Stage 1 Failure for {pid}: {e}")
+
+    # --- PASO 2 del CHAIN: Extracción Estructurada ---
+    prompt = EXTRACTION_PROMPT.format(
+        pid=pid, 
+        location_snippet=location_snippet,
+        context=context[:CONFIG["CONTEXT_CHARS"]]
+    )
+    
     payload = json.dumps({
         "model":          CONFIG["MODEL"],
         "messages":       [{"role": "user", "content": prompt}],
@@ -668,17 +806,18 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger) -> Optional[dic
     for attempt in range(1, CONFIG["MAX_RETRIES"] + 1):
         try:
             req = urllib.request.Request(
-                CONFIG["MOTOR_URL"], data=payload,
+                CONFIG["LLAMA_URL"], data=payload,
                 headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=CONFIG["LLAMA_TIMEOUT"]) as resp:
                 content = json.loads(resp.read())["choices"][0]["message"]["content"]
 
-            # Loguear razonamiento si existe
-            razonamiento = re.search(r'<razonamiento>(.*?)</razonamiento>', content, re.DOTALL)
+            # Loguear razonamiento
+            razonamiento = re.search(r'<(think|razonamiento)>(.*?)</\1>', content, re.DOTALL | re.IGNORECASE)
             if razonamiento:
-                log.debug(f"    🧠 Razonamiento AI {pid}: {razonamiento.group(1).strip()[:200]}...")
+                thought = razonamiento.group(2).strip()
+                log.debug(f"    Heuristic Rationale {pid}: {thought[:200]}...")
+                report_state(pdf_name, "IA_THINKING", f"[{pid}] {thought[:180]}...")
 
-            # Buscar el bloque JSON dentro de <output_json> o simplemente el primer { }
             json_match = re.search(r'<output_json>(.*?)</output_json>', content, re.DOTALL)
             if not json_match:
                 json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
@@ -686,42 +825,30 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger) -> Optional[dic
             if json_match:
                 json_str = json_match.group(1) if '<output_json>' in content else json_match.group(0)
                 extracted = json.loads(json_str)
-                log.info(f"  🤖 AI Resp {pid}: {extracted}")
-                # Normalizar claves en minúscula
-                extracted = {k.lower().strip(): str(v).strip()
-                             for k, v in extracted.items()}
+                extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
                 
-                # Normalización de riesgos (Nueva regla de negocio)
-                if extracted.get("riesgo") == "crítico":
-                    extracted["riesgo"] = "alto"
+                # Normalización de Sectores
+                sector = extracted.get("sector", "OTROS").upper()
+                if any(x in sector for x in ["SOLAR", "EOLICA", "ELECTRIC", "LINEA", "ENERGIA"]):
+                    extracted["sector"] = "ENERGÍA"
                 
                 log.debug(f"    AI ({attempt}): {extracted}")
                 return extracted
             else:
-                log.warning(f"    ⚠️ Sin JSON en respuesta ({attempt}/{CONFIG['MAX_RETRIES']}): {content[:100]}")
-                # Fallback si la IA no produce JSON válido
+                log.warning(f"    Non-structured response detected ({attempt}/{CONFIG['MAX_RETRIES']})")
                 return {
-                    "proyecto": "EXTRACCIÓN AUTOMÁTICA",
-                    "promovente": "DESCONOCIDO",
-                    "estado": "",
-                    "municipio": "",
-                    "riesgo": "bajo",
-                    "descripcion": "Extracción automática (AI falló o sin contexto corregido)"
+                    "proyecto": "EXTRACCIÓN AUTOMÁTICA", "promovente": "DESCONOCIDO",
+                    "estado": "", "municipio": "", "riesgo": "bajo",
+                    "descripcion": "AI falló en estructurar JSON"
                 }
 
-        except urllib.error.URLError as e:
-            log.warning(f"    ⚠️ URLError ({attempt}): {e.reason}")
-        except (json.JSONDecodeError, KeyError) as e:
-            log.warning(f"    ⚠️ Parse error ({attempt}): {e}")
         except Exception as e:
-            log.warning(f"    ⚠️ Error ({attempt}): {e}")
-
-        if attempt < CONFIG["MAX_RETRIES"]:
-            wait = CONFIG["RETRY_BASE_WAIT"] * (2 ** (attempt - 1))
-            log.info(f"    ⏳ Retry en {wait}s...")
-            time.sleep(wait)
+            log.warning(f"    Neural extraction anomaly ({attempt}): {e}")
+            if attempt < CONFIG["MAX_RETRIES"]:
+                time.sleep(CONFIG["RETRY_BASE_WAIT"])
 
     return None
+
 
 
 # ─────────────────────────────────────────────────────────
@@ -732,11 +859,13 @@ def write_to_csv(year: int, pid: str, d: dict):
     if pid_in_csv(pid):
         return
     def clean(v): return re.sub(r'[,\n\r]', ' ', str(d.get(v, ""))).strip()
+    # Nueva estructura: AÑO, ID, ESTADO, MUNICIPIO, LOCALIDAD, PROYECTO, PROMOVENTE, SECTOR, INSIGHT, COORDENADAS, POLIGONO
     row = [str(year), pid,
-           clean("estado"), clean("municipio"),
+           clean("estado"), clean("municipio"), clean("localidad"),
            clean("proyecto"), clean("promovente"),
-           clean("riesgo") or "bajo",
-           clean("descripcion")]
+           clean("sector") or "OTROS",
+           clean("insight"),
+           clean("coordenadas"), clean("poligono")]
     with open(CONFIG["CSV_FILE"], "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow(row)
 
@@ -751,6 +880,34 @@ def write_to_graph(pid: str, d: dict):
     if lines:
         with open(CONFIG["GRAPH_FILE"], "a") as f:
             f.write("\n".join(lines) + "\n")
+
+def write_to_supabase(year: int, pid: str, d: dict, log: logging.Logger):
+    """Sincroniza el proyecto con Supabase."""
+    if not supabase_client:
+        return
+
+    try:
+        # Preparar data
+        data = {
+            "id_proyecto": pid,
+            "anio": int(year),
+            "estado": d.get("estado", ""),
+            "municipio": d.get("municipio", ""),
+            "localidad": d.get("localidad", ""),
+            "proyecto": d.get("proyecto", ""),
+            "promovente": d.get("promovente", ""),
+            "sector": d.get("sector", "OTROS"),
+            "insight": d.get("insight", ""),
+            "coordenadas": d.get("coordenadas") or d.get("coordinates", ""),
+            "poligono": d.get("poligono") or d.get("polygon", ""),
+            "updated_at": datetime.datetime.now().isoformat()
+        }
+        
+        # Upsert: insertar o actualizar por id_proyecto
+        supabase_client.table("proyectos").upsert(data, on_conflict="id_proyecto").execute()
+        log.debug(f"  ☁️ Cloud: {pid} sincronizado")
+    except Exception as e:
+        log.error(f"  ❌ Cloud Sync Error para {pid}: {e}")
 
 
 # ─────────────────────────────────────────────────────────
@@ -770,14 +927,14 @@ def fetch_portal_docs(pid: str, log: logging.Logger) -> dict:
     log.info(f"  🌐 Portal: consultando {pid}")
     content = http_get(api_url, timeout=30)
     if content is None:
-        log.warning(f"  ⚠️ Portal no respondió para {pid}")
+        log.warning(f"    Remote source timeout for {pid}")
         return {}
 
     try:
         data = json.loads(content)
         return data
     except json.JSONDecodeError:
-        log.debug(f"  ⚠️ Portal: respuesta no JSON para {pid}")
+        log.debug(f"    Remote source: non-JSON response for {pid}")
         return {}
 
 def download_document(pid: str, doc_url: str, doc_type: str, log: logging.Logger) -> Optional[Path]:
@@ -804,6 +961,61 @@ def download_document(pid: str, doc_url: str, doc_type: str, log: logging.Logger
         return None
 
 
+def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger) -> Optional[dict]:
+    """Extrae datos usando Qwen2-VL (Vision) si el texto está muy roto o es ilegible."""
+    try:
+        work_dir = CONFIG["WORK_DIR"] / str(year)
+        pdf_path = work_dir / pdf_name
+        if not pdf_path.exists(): return None
+        
+        log.info(f"  👁️  Activando OCR Vision (Qwen2-VL) para {pid}...")
+        
+        # Convertir las primeras páginas (donde suelen estar las tablas)
+        # Ajustamos DPI a 150 para balancear calidad y velocidad en el AMD A8
+        images = convert_from_path(str(pdf_path), first_page=1, last_page=3, dpi=150)
+        
+        for i, img in enumerate(images):
+            # Redimensionar para no saturar memoria
+            img.thumbnail((1200, 1200)) 
+            from io import BytesIO
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            
+            payload = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"Extract project info for ID {pid} from this SEMARNAT Gaceta image. Return JSON with PROMOVENTE, PROYECTO, ESTADO, MUNICIPIO, RIESGO, DESCRIPCION."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                        ]
+                    }
+                ],
+                "max_tokens": 600
+            }
+            
+            req = urllib.request.Request(CONFIG["OCR_URL"], data=json.dumps(payload).encode(),
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=180) as r:
+                res = json.loads(r.read())
+                content = res["choices"][0]["message"]["content"]
+                
+                # Extraer JSON
+                m = re.search(r"\{.*\}", content, re.DOTALL)
+                if m:
+                    extracted = json.loads(m.group(0))
+                    # Normalizar
+                    extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
+                    if extracted.get("promovente") and extracted.get("promovente").lower() not in ("desconocido", "none", "null", ""):
+                        log.info(f"  ✨ Vision OCR exitoso para {pid}")
+                        return extracted
+        return None
+    except Exception as e:
+        log.error(f"  ❌ Error en Vision OCR: {e}")
+        return None
+
+
 # ─────────────────────────────────────────────────────────
 # LOOP DE EXTRACCIÓN (procesa la queue pendiente)
 # ─────────────────────────────────────────────────────────
@@ -813,14 +1025,14 @@ def run_extraction(queue: PersistentQueue, log: logging.Logger):
         log.info("📋 Queue vacía")
         return
 
-    log.info(f"🚀 Extrayendo {len(pending)} IDs pendientes...")
+    log.info(f"Executing high-throughput extraction on {len(pending)} operational identifiers...")
 
     for item in pending:
         if _shutdown:
             break
 
         if not wait_for_llama(log, max_wait=60):
-            log.error("🛑 llama-server inaccesible — abortando ciclo")
+            log.error("Critical: LLM endpoint unreachable - cycle aborted")
             break
 
         txt_path = Path(item.txt_file)
@@ -841,12 +1053,29 @@ def run_extraction(queue: PersistentQueue, log: logging.Logger):
         context = re.sub(r'\s+', ' ', context).strip()
 
         report_state(item.pdf, "IA_EXTRACTING", item.pid)
-        log.info(f"  🇲🇽 [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid}")
+        log.info(f"  Processor Task [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid}")
 
         extracted = extract_with_ai(item.pid, context, log)
 
+        # DIGITAL TWIN GROUNDING: Consultar el portal antes de decidir calidad
+        portal_data = fetch_portal_docs(item.pid, log)
+
+        # Fallback a Vision OCR si la IA de texto no fue convincente
+        if not extracted or (extracted.get("promovente") or "").lower() in ("desconocido", "none", "", "null"):
+            vision_extracted = extract_with_vision(item.pid, item.year, item.pdf, log)
+            if vision_extracted:
+                extracted = vision_extracted
+
         if extracted:
+            # 1. Normalizar estructura técnica
             extracted = normalize_extracted_data(item.pid, extracted)
+            
+            # 2. Aterrizar con datos oficiales (Estrategia 1: Grounding)
+            if portal_data:
+                extracted = ground_data(extracted, portal_data, log)
+                # Volver a normalizar por si el portal trajo nombres en minúscula
+                extracted = normalize_extracted_data(item.pid, extracted)
+
             promovente = extracted.get("promovente", "").strip()
             
             # La descripción ya viene normalizada de normalize_extracted_data
@@ -855,6 +1084,7 @@ def run_extraction(queue: PersistentQueue, log: logging.Logger):
                 if not CONFIG["DRY_RUN"]:
                     write_to_csv(item.year, item.pid, extracted)
                     write_to_graph(item.pid, extracted)
+                    write_to_supabase(item.year, item.pid, extracted, log)
                     # Intentar descargar documentos del portal
                     portal_data = fetch_portal_docs(item.pid, log)
                     if portal_data:
@@ -883,6 +1113,7 @@ def run_extraction(queue: PersistentQueue, log: logging.Logger):
             fallback = normalize_extracted_data(item.pid, fallback)
             if not CONFIG["DRY_RUN"]:
                 write_to_csv(item.year, item.pid, fallback)
+                write_to_supabase(item.year, item.pid, fallback, log)
             queue.mark_success(item.pid)
             log.warning(f"  ⚠️ Fallback usado para {item.pid}")
 
@@ -923,7 +1154,7 @@ _shutdown = False
 
 def _handle_signal(sig, _frame):
     global _shutdown
-    print("\n🛑 Señal recibida — guardando estado...")
+    print("\nTermination signal received - persisting operational state...")
     _shutdown = True
 
 signal.signal(signal.SIGINT,  _handle_signal)
@@ -949,11 +1180,19 @@ def main():
         except (ValueError, IndexError):
             pass
 
+    # Asegurar que el PID_FILE existe si estamos corriendo
+    pid = os.getpid()
+    try:
+        with open("/tmp/zohar_agent_v2.pid", "w") as f:
+            f.write(str(pid))
+    except Exception:
+        pass
+
     log   = setup_logging(CONFIG["LOG_FILE"])
     queue = PersistentQueue(CONFIG["QUEUE_FILE"])
     seen  = SeenGacetas(CONFIG["SEEN_FILE"])
 
-    log.info("═" * 58)
+    log.info("══ ZOHAR AGENT V2.2 START ══")
     log.info(f"  ZOHAR AGENT v2.2  |  Años: {target_years[0]}...{target_years[-1]}  |  DRY_RUN:{CONFIG['DRY_RUN']}")
     st = queue.stats()
     log.info(f"  Queue: {st}")
@@ -962,10 +1201,14 @@ def main():
     CONFIG["DOCS_DIR"].mkdir(parents=True, exist_ok=True)
 
     def run_cycle():
-        # Discover en todos los años seleccionados
+        # ⚡ PRIORIDAD: Extracción de la queue global (IA)
+        if not _shutdown:
+            run_extraction(queue, log)
+
+        # 🔍 Después del procesamiento, monitorear años para nuevos PDFs
         for year in target_years:
             if _shutdown: break
-            log.info(f"🔍 Monitoreando año {year}...")
+            log.info(f"Monitoring temporal index for year {year}...")
             pdf_links = fetch_pdf_links(year, seen, log)
             total_new = 0
             for url in pdf_links:
@@ -973,26 +1216,37 @@ def main():
                 n = process_pdf(url, year, queue, log)
                 total_new += n
             if total_new > 0:
-                log.info(f"📥 {year}: {total_new} IDs nuevos agregados")
-
-        # Extracción de la queue global (IA)
-        if not _shutdown:
-            run_extraction(queue, log)
+                log.info(f"Ingestion successful: {year}: {total_new} new identifiers cataloged")
 
     if CONFIG["DAEMON_MODE"]:
-        poll_s = CONFIG["POLL_INTERVAL_MIN"] * 60
-        log.info(f"⏰ Modo daemon — polling años {target_years} cada {CONFIG['POLL_INTERVAL_MIN']} min")
+        log.info(f"HIGH-THROUGHPUT BATCH ESCALATION ACTIVE — Processing temporal index: {target_years}")
         while not _shutdown:
+            # 1. Forzar recarga de cola desde disco
+            queue = PersistentQueue(CONFIG["QUEUE_FILE"])
+            pending_count = len(queue.pending())
+            
+            # 2. Si hay trabajo, procesar SIN DESCANSO
+            if pending_count > 0:
+                log.info(f"Initiating extraction cycle: {pending_count} identifiers queued.")
+                run_extraction(queue, log)
+                # Volver al inicio del bucle inmediatamente
+                continue
+            
+            # 3. Si no hay trabajo de IA, buscar gacetas nuevas
+            log.info("Queue empty. Initiating search for new datasets...")
             run_cycle()
-            if not _shutdown:
-                log.info(f"😴 Durmiendo {CONFIG['POLL_INTERVAL_MIN']} min...")
+            
+            # 4. Solo dormir si REALMENTE no hay nada más que hacer
+            if len(queue.pending()) == 0:
+                poll_s = CONFIG["POLL_INTERVAL_MIN"] * 60
+                log.info(f"No pending operations. Standby mode active for {CONFIG['POLL_INTERVAL_MIN']} minutes.")
                 for _ in range(poll_s):
                     if _shutdown: break
                     time.sleep(1)
     else:
         run_cycle()
 
-    log.info("👋 Agente detenido correctamente.")
+    log.info("Agent process terminated gracefully.")
 
 
 if __name__ == "__main__":
