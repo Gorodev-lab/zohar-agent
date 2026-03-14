@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://blue-numbers-swim.loca.lt/api/:path*"
+      "destination": "https://metal-clubs-wish.loca.lt/api/:path*"
     }
   ]
 }
