@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://187.194.16.28:8081/api/:path*"
+      "destination": "https://kind-pillows-sink.loca.lt/api/:path*"
     }
   ]
 }
