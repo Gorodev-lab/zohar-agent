@@ -18,7 +18,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://puny-meals-strive.loca.lt/api/:path*"
+      "destination": "https://shaggy-books-design.loca.lt/api/:path*"
     }
   ]
 }
