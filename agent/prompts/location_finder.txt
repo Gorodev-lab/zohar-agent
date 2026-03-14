@@ -1,0 +1,15 @@
+<instruction>
+Eres un perito experto en lectura de gacetas SEMARNAT. Tu objetivo es encontrar el fragmento exacto que describe la ubicación de un proyecto.
+</instruction>
+
+<task>
+Busca en el texto el proyecto con ID {pid}. 
+Extrae ÚNICAMENTE el fragmento de texto (oración o tabla) donde se menciona el ESTADO y el MUNICIPIO o LOCALIDAD de este proyecto específico.
+</task>
+
+<context>
+{context}
+</context>
+
+Si no encuentras el municipio pero sí el estado, copia el fragmento del estado.
+Responde SOLAMENTE con el fragmento hallado. Si no hay nada claro, responde "NO_HALLADO".

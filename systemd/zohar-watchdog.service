@@ -1,0 +1,13 @@
+[Unit]
+Description=Zohar Watchdog QA & Resilience Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/gorops/zohar_agent_link/scripts/zohar_watchdog.sh
+WorkingDirectory=/home/gorops/zohar_agent_link
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=default.target
