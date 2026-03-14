@@ -1499,7 +1499,7 @@ PLACEHOLDER_TERMS = {
     "sistema de gestión", "proyecto de inversión", "información del proyecto",
     "estudio de impacto", "estudio de sustentabilidad", "extracción automática",
     "proyecto en evaluación", "bitácora del trámite", "consulta de trámites",
-    "gaceta ecológica", r"semarnat gazette", r"gaceta semarnat", "listado de proyectos", "resumen del proyecto",
+    "gaceta ecológica", r"semarnat gazette", r"gaceta semarnat", r"gazette semarnat", "listado de proyectos", "resumen del proyecto",
     # Instrucciones o nombres de campos (Alucinaciones de prompt)
     "id_proyecto", "el id", "nombre del proyecto", "nombre del promovente",
     "entidad federativa", "busque el nombre", "error de extracción", "sin información",

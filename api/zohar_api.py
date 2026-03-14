@@ -43,7 +43,7 @@ FORBIDDEN_PATTERNS = [
     r"desconocido", r"null", r"none", r"n/a", r"placeholder", r"undefined",
     r"sistema de gestión", r"proyecto de inversión", r"información del proyecto",
     r"estudio de impacto", r"estudio de sustentabilidad", r"extracción automática",
-    r"gaceta ecológica", r"semarnat gazette", r"gaceta semarnat"
+    r"gaceta ecológica", r"semarnat gazette", r"gaceta semarnat", r"gazette semarnat",
     r"bitácora del trámite", r"consulta de trámites", r"gaceta ecológica",
     r"id_proyecto", r"el id", r"nombre del proyecto", r"nombre del promovente",
     r"extrae el", r"error de extracción", r"sin información", r"generic name",
