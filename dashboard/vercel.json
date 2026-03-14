@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://tidy-bobcats-grow.loca.lt/api/:path*"
+      "destination": "https://lucky-ghosts-cough.loca.lt/api/:path*"
     }
   ]
 }
