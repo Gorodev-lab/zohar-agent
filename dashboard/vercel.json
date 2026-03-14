@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://major-zoos-prove.loca.lt/api/:path*"
+      "destination": "https://short-terms-invent.loca.lt/api/:path*"
     }
   ]
 }
