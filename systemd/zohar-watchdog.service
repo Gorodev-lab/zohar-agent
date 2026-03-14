@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 ExecStart=/home/gorops/zohar_agent_link/scripts/zohar_watchdog.sh
 WorkingDirectory=/home/gorops/zohar_agent_link
+KillMode=process
 Restart=always
 RestartSec=60
 
