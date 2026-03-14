@@ -45,7 +45,8 @@ def test_vercel_proxy_sync():
     with open(vercel_path, "r") as f:
         vercel_config = json.load(f)
     
-    proxy_dest = vercel_config["rewrites"][0]["destination"]
+    # Buscar el primer rewrite que apunta al túnel (que empiece con http)
+    proxy_dest = next((r["destination"] for r in vercel_config["rewrites"] if r["destination"].startswith("http")), "")
     
     assert current_tunnel in proxy_dest, f"Vercel proxy destination ({proxy_dest}) doesn't match current tunnel ({current_tunnel})"
 
