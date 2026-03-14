@@ -869,7 +869,10 @@ function dashboard() {
                 const b = window.location.origin;
                 const res = await fetch(`${b}/api/control`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'bypass-tunnel-reminder': 'true'
+                    },
                     body: JSON.stringify({ action })
                 });
                 const d = await res.json();
@@ -883,7 +886,10 @@ function dashboard() {
                 const b = window.location.origin;
                 const res = await fetch(`${b}/api/audit`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'bypass-tunnel-reminder': 'true'
+                    },
                     body: JSON.stringify({ pid, status, notes: 'Manual audit via Dashboard' })
                 });
                 const d = await res.json();
