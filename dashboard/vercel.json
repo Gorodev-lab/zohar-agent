@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://spotty-apples-wonder.loca.lt/api/:path*"
+      "destination": "https://some-impalas-do.loca.lt/api/:path*"
     }
   ]
 }
