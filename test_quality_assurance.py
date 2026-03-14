@@ -68,7 +68,9 @@ def test_api_status_reachable():
     import urllib.request
     try:
         url = f"{current_tunnel}/api/status"
-        with urllib.request.urlopen(url, timeout=5) as response:
+        # Bypassing localtunnel interstitial page
+        req = urllib.request.Request(url, headers={'Bypass-Tunnel-Reminder': 'true'})
+        with urllib.request.urlopen(req, timeout=10) as response:
             assert response.getcode() == 200
             data = json.loads(response.read().decode())
             assert "llama_ok" in data
