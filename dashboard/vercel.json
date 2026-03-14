@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://happy-tires-remain.loca.lt/api/:path*"
+      "destination": "https://polite-words-raise.loca.lt/api/:path*"
     }
   ]
 }
