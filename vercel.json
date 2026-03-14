@@ -6,19 +6,19 @@
   "rewrites": [
     {
       "source": "/api/cloud-projects",
-      "destination": "/api/cloud-projects.js"
+      "destination": "/api-cloud/cloud-projects.js"
     },
     {
       "source": "/api/cloud-analytics",
-      "destination": "/api/cloud-analytics.js"
+      "destination": "/api-cloud/cloud-analytics.js"
     },
     {
       "source": "/api/cloud-status",
-      "destination": "/api/cloud-status.js"
+      "destination": "/api-cloud/cloud-status.js"
     },
     {
-      "source": "/api/(status|agent_state|projects|analytics|logs|control|audit|diagnostics)",
-      "destination": "https://puny-meals-strive.loca.lt/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://puny-meals-strive.loca.lt/api/:path*"
     },
     {
       "source": "/(.*)",
