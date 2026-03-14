@@ -5,8 +5,12 @@
   "trailingSlash": false,
   "rewrites": [
     {
+      "source": "/api/cloud-projects",
+      "destination": "/api/cloud-projects.js"
+    },
+    {
       "source": "/api/:path*",
-      "destination": "https://lazy-bikes-guess.loca.lt/api/:path*"
+      "destination": "https://solid-rocks-learn.loca.lt/api/:path*"
     }
   ]
 }

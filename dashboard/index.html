@@ -839,7 +839,7 @@ function dashboard() {
                 const [s, a, p, an, l] = await Promise.all([
                     fetch(`${b}/api/status`, { headers: h }).then(r => r.json()),
                     fetch(`${b}/api/agent_state`, { headers: h }).then(r => r.json()),
-                    fetch(`${b}/api/projects`, { headers: h }).then(r => r.json()),
+                    fetch(`${b}/api/cloud-projects`, { headers: h }).then(r => r.json()),
                     fetch(`${b}/api/analytics`, { headers: h }).then(r => r.json()),
                     fetch(`${b}/api/logs`, { headers: h }).then(r => r.json()),
                 ]);
