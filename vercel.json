@@ -1,25 +1,40 @@
 {
   "version": 2,
   "name": "zohar-agent",
-  "type": "module",
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/api/cloud-projects",
-      "destination": "/api/cloud-projects"
+      "source": "/api/status",
+      "destination": "https://puny-meals-strive.loca.lt/api/status"
     },
     {
-      "source": "/api/cloud-analytics",
-      "destination": "/api/cloud-analytics"
+      "source": "/api/agent_state",
+      "destination": "https://puny-meals-strive.loca.lt/api/agent_state"
     },
     {
-      "source": "/api/cloud-status",
-      "destination": "/api/cloud-status"
+      "source": "/api/projects",
+      "destination": "https://puny-meals-strive.loca.lt/api/projects"
     },
     {
-      "source": "/api/(status|agent_state|projects|analytics|logs|control|audit|diagnostics)",
-      "destination": "https://puny-meals-strive.loca.lt/api/$1"
+      "source": "/api/analytics",
+      "destination": "https://puny-meals-strive.loca.lt/api/analytics"
+    },
+    {
+      "source": "/api/logs",
+      "destination": "https://puny-meals-strive.loca.lt/api/logs"
+    },
+    {
+      "source": "/api/control",
+      "destination": "https://puny-meals-strive.loca.lt/api/control"
+    },
+    {
+      "source": "/api/audit",
+      "destination": "https://puny-meals-strive.loca.lt/api/audit"
+    },
+    {
+      "source": "/api/diagnostics",
+      "destination": "https://puny-meals-strive.loca.lt/api/diagnostics"
     },
     {
       "source": "/(.*)",
