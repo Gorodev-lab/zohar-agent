@@ -833,22 +833,43 @@ function dashboard() {
         },
 
         async fetchData() {
+            const b = window.location.origin;
+            const h = { 'bypass-tunnel-reminder': 'true' };
+            const f = async (u) => fetch(`${b}${u}`, { headers: h }).then(r => r.json()).catch(() => ({}));
+
             try {
-                const b = window.location.origin;
-                const h = { 'bypass-tunnel-reminder': 'true' };
                 const [s, a, p, an, l] = await Promise.all([
-                    fetch(`${b}/api/status`, { headers: h }).then(r => r.json()),
-                    fetch(`${b}/api/agent_state`, { headers: h }).then(r => r.json()),
-                    fetch(`${b}/api/cloud-projects`, { headers: h }).then(r => r.json()),
-                    fetch(`${b}/api/analytics`, { headers: h }).then(r => r.json()),
-                    fetch(`${b}/api/logs`, { headers: h }).then(r => r.json()),
+                    f('/api/status'),
+                    f('/api/agent_state'),
+                    f('/api/cloud-projects'),
+                    f('/api/analytics'),
+                    f('/api/logs'),
                 ]);
-                this.status    = s;
+
+                // Fallback de status si el tunnel falla (s suele venir vacío o con error)
+                if (!s.llama_status) {
+                    const cs = await f('/api/cloud-status');
+                    if (cs.mode) this.status = cs;
+                } else {
+                    this.status = s;
+                }
+
                 this.agent     = a;
-                this.analytics = an;
-                this.agentLogs = l;
-                const hash = JSON.stringify(p);
-                if (hash !== this.lastHash) { this.projects = p; this.lastHash = hash; }
+                
+                if (Object.keys(an).length) {
+                    this.analytics = an;
+                } else {
+                    const can = await f('/api/cloud-analytics');
+                    if (can.total) this.analytics = can;
+                }
+                
+                this.agentLogs = Array.isArray(l) ? l : this.agentLogs;
+
+                if (Array.isArray(p)) {
+                    const hash = JSON.stringify(p);
+                    if (hash !== this.lastHash) { this.projects = p; this.lastHash = hash; }
+                }
+
                 this.$nextTick(() => {
                     const el = document.getElementById('logConsole');
                     if (el) el.scrollTop = el.scrollHeight;
