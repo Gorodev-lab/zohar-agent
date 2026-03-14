@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://fancy-oranges-sip.loca.lt/api/:path*"
+      "destination": "https://solid-rocks-learn.loca.lt/api/:path*"
     }
   ]
 }
