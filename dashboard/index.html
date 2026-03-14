@@ -835,7 +835,15 @@ function dashboard() {
         async fetchData() {
             const b = window.location.origin;
             const h = { 'bypass-tunnel-reminder': 'true' };
-            const f = async (u) => fetch(`${b}${u}`, { headers: h }).then(r => r.json()).catch(() => ({}));
+            const f = async (u) => {
+                try {
+                    const r = await fetch(`${b}${u}`, { headers: h });
+                    if (!r.ok) return {};
+                    const ct = r.headers.get('content-type');
+                    if (ct && ct.includes('application/json')) return await r.json();
+                    return {};
+                } catch (e) { return {}; }
+            };
 
             try {
                 const [s, a, p, an, l] = await Promise.all([
@@ -896,6 +904,9 @@ function dashboard() {
                     },
                     body: JSON.stringify({ action })
                 });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const ct = res.headers.get('content-type');
+                if (!ct || !ct.includes('application/json')) throw new Error('Response is not JSON');
                 const d = await res.json();
                 if (d.status === 'error') alert('error: ' + d.message);
                 setTimeout(() => { this.fetchData(); this.fetchDiag(); }, 1800);
