@@ -410,7 +410,7 @@
                 </div>
                 <div class="pill" :class="diag.services?.agent?.running ? 'pill-ok' : 'pill-off'">
                     <span class="dot" :class="diag.services?.agent?.running ? 'dot-ok' : 'dot-off'"></span>
-                    agent
+                    agente
                 </div>
             </div>
 
@@ -446,7 +446,7 @@
                     <span style="font-size:10px;color:var(--fg-muted)" x-text="diag.ts ? diag.ts.slice(11) : '--:--:--'"></span>
                     <span style="font-size:10px;font-weight:700;letter-spacing:.08em"
                         :class="(diag.issues||[]).some(i=>i.severity==='critical'||i.severity==='warning') ? 'tag-err' : 'tag-ok'"
-                        x-text="(diag.issues||[]).some(i=>i.severity==='critical') ? '[' + (diag.issues||[]).filter(i=>i.severity==='critical').length + ' critical]' : (diag.issues||[]).some(i=>i.severity==='warning') ? '[warn]' : '[all-ok]'"></span>
+                        x-text="(diag.issues||[]).some(i=>i.severity==='critical') ? '[' + (diag.issues||[]).filter(i=>i.severity==='critical').length + ' crítico]' : (diag.issues||[]).some(i=>i.severity==='warning') ? '[aviso]' : '[sistema-ok]'"></span>
                 </div>
             </div>
             <div class="section-body">
@@ -516,7 +516,7 @@
 
                     <!-- ISSUES -->
                     <div>
-                        <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.12em;margin-bottom:8px;text-transform:uppercase">-- active anomalies --</div>
+                        <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.12em;margin-bottom:8px;text-transform:uppercase">-- anomalías activas --</div>
                         <div class="issue-list">
                             <template x-for="iss in (diag.issues||[])" :key="iss.component">
                                 <div class="issue"
@@ -544,11 +544,11 @@
 
                     <!-- QUEUE -->
                     <div>
-                        <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.12em;margin-bottom:8px;text-transform:uppercase">-- ingestion queue --</div>
+                        <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.12em;margin-bottom:8px;text-transform:uppercase">-- cola de ingesta --</div>
                         
                         <div class="progress-wrap">
                             <div class="progress-lbl">
-                                <span>acquisition_progress</span>
+                                <span>progreso_adquisicion</span>
                                 <span x-text="(diag.queue?.progress_pct || 0) + '%'"></span>
                             </div>
                             <div class="progress-track">
@@ -559,19 +559,19 @@
                         <div class="q-counters">
                             <div class="q-box">
                                 <div class="q-num tag-ok" x-text="(diag.queue?.success||0).toLocaleString()"></div>
-                                <div class="q-lbl">validated</div>
+                                <div class="q-lbl">validados</div>
                             </div>
                             <div class="q-box">
                                 <div class="q-num" style="color:var(--blue)" x-text="(diag.queue?.pending||0).toLocaleString()"></div>
-                                <div class="q-lbl">queued</div>
+                                <div class="q-lbl">en cola</div>
                             </div>
                             <div class="q-box">
                                 <div class="q-num tag-err" x-text="(diag.queue?.failed||0).toLocaleString()"></div>
-                                <div class="q-lbl">anomalies</div>
+                                <div class="q-lbl">anomalías</div>
                             </div>
                         </div>
 
-                        <div style="font-size:10px;color:var(--fg-dim);margin:8px 0 4px;letter-spacing:.08em">by year</div>
+                        <div style="font-size:10px;color:var(--fg-dim);margin:8px 0 4px;letter-spacing:.08em">por año</div>
                         <template x-for="[yr, cnt] in Object.entries(diag.queue?.by_year||{}).slice(0,8)" :key="yr">
                             <div class="yr-row">
                                 <span class="yr-label" x-text="yr"></span>
@@ -615,7 +615,7 @@
         <div class="section">
             <div class="section-head">
                 <span class="section-title"><span>$</span> tail -f activity_stream.jsonl</span>
-                <span style="font-size:10px;color:var(--fg-muted)">real-time stream // last 20 frames</span>
+                <span style="font-size:10px;color:var(--fg-muted)">flujo en tiempo real // últimos 20 cuadros</span>
             </div>
             <div id="logConsole">
                 <template x-for="log in agentLogs">
