@@ -1,0 +1,15 @@
+[Unit]
+Description=Zohar Monitoring Agent
+After=network.target zohar-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/gorops/proyectos antigravity/zohar-agent/agent
+Environment="PATH=/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin:/usr/bin:/bin"
+ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" -c "import zohar_agent_v2 as z; z.CONFIG['DAEMON_MODE'] = True; z.main()"
+Restart=always
+RestartSec=15
+RestartPreventExitStatus=255
+
+[Install]
+WantedBy=default.target

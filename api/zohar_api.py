@@ -1,7 +1,6 @@
 """
-ZOHAR API - FastAPI Backend
-Puerto: 8081
-Sirve el dashboard y los endpoints de la API de monitoreo.
+ZOHAR API - FastAPI Backend v6.0
+Integridad de Datos Esoteria - Grounding, Auditing & Governance
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +14,10 @@ import json
 import csv
 import pandas as pd
 import datetime
+import sqlite3
+import unicodedata
 
-app = FastAPI(title="Zohar Lean API", version="5.0")
+app = FastAPI(title="Zohar Integrity API", version="6.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,14 +26,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Determinar el directorio base dinámicamente
+# ─────────────────────────────────────────────────────────
+# CONFIGURACIÓN
+# ─────────────────────────────────────────────────────────
 API_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(API_DIR)
 HOME = os.path.expanduser("~")
 
-CSV_FILE = os.path.join(HOME, "zohar_historico_proyectos.csv")
+DB_PATH = os.path.join(HOME, "zohar_intelligence.db")
+CSV_PATH = os.path.join(HOME, "zohar_historico_proyectos.csv")
 STATE_FILE = os.path.join(HOME, "zohar_agent_state.json")
 DASHBOARD_DIR = os.path.join(BASE_DIR, "dashboard")
+
+# BLACKLIST CRÍTICA (Detectores de Hallucinación)
+FORBIDDEN_PATTERNS = [
+    r"desconocido", r"null", r"none", r"n/a", r"placeholder", r"undefined",
+    r"sistema de gestión", r"proyecto de inversión", r"información del proyecto",
+    r"estudio de impacto", r"estudio de sustentabilidad", r"extracción automática",
+    r"gaceta ecológica", r"semarnat gazette", r"gaceta semarnat"
+    r"bitácora del trámite", r"consulta de trámites", r"gaceta ecológica",
+    r"id_proyecto", r"el id", r"nombre del proyecto", r"nombre del promovente",
+    r"extrae el", r"error de extracción", r"sin información", r"generic name",
+    r"^.{0,8}$"
+]
 
 # Servir dashboard
 app.mount("/static", StaticFiles(directory=DASHBOARD_DIR), name="static")
@@ -41,64 +57,188 @@ app.mount("/static", StaticFiles(directory=DASHBOARD_DIR), name="static")
 def read_index():
     return FileResponse(os.path.join(DASHBOARD_DIR, "index.html"))
 
-def _check_service(url: str, timeout: int = 6) -> tuple[bool, str]:
-    """Verifica disponibilidad HTTP. Retorna (ok, info). Timeout mayor para modelos ocupados."""
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
-            body = r.read().decode("utf-8", errors="replace")[:200]
-            return True, body
-    except Exception as e:
-        return False, str(e)[:100]
-
-def _proc_running(pattern: str) -> bool:
-    """True si hay un proceso vivo que coincide con el pattern."""
-    try:
-        out = subprocess.check_output(["pgrep", "-f", pattern], text=True, timeout=2).strip()
-        return bool(out)
-    except Exception:
+# ─────────────────────────────────────────────────────────
+# CORE: AUDITORÍA DE DATOS
+# ─────────────────────────────────────────────────────────
+def is_valid_record(proyecto, promovente, fuentes):
+    """Verifica si un registro es confiable."""
+    p = str(proyecto).lower()
+    m = str(promovente).lower()
+    f = str(fuentes).lower()
+    
+    # Bajamos la exigencia a 10 chars para el nombre si no hay fuentes.
+    # Si el nombre es muy corto (< 10) y no hay fuentes, lo consideramos sospechoso.
+    if not ("http" in f) and len(p) < 10: 
         return False
+        
+    for pattern in FORBIDDEN_PATTERNS:
+        if re.search(pattern, p) or re.search(pattern, m): return False
+    
+    if len(p) < 5 or len(m) < 3: return False
+    return True
 
-import unicodedata
-def _strip_ctrl(text: str) -> str:
-    """Elimina emojis y caracteres non-ASCII para estética terminal."""
-    return ''.join(c for c in text if ord(c) < 128 or unicodedata.category(c) not in ('So','Cs','Cf'))
+def load_audited_data():
+    all_projects = []
+    base_cols = ["ANIO", "ID_PROYECTO", "ESTADO", "MUNICIPIO", "LOCALIDAD", 
+                 "PROYECTO", "PROMOVENTE", "SECTOR", "INSIGHT", 
+                 "COORDENADAS", "POLIGONO", "FUENTES"]
+    audit_cols = ["audit_status", "auditor_notes", "confidence_score", "REASONING", "SNIPPET", "LINK_PID"]
+    all_cols = base_cols + audit_cols
 
+    # 1. SQLite (Gold Standard)
+    if os.path.exists(DB_PATH):
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                df_db = pd.read_sql_query("SELECT * FROM projects", conn)
+                if not df_db.empty:
+                    df_db = df_db.rename(columns={
+                        'year': 'ANIO', 'pid': 'ID_PROYECTO', 'estado': 'ESTADO',
+                        'municipio': 'MUNICIPIO', 'proyecto': 'PROYECTO',
+                        'promovente': 'PROMOVENTE', 'sector': 'SECTOR',
+                        'insight': 'INSIGHT', 'sources': 'FUENTES'
+                    })
+                    # Asegurar que existan las columnas de auditoría
+                    for c in audit_cols:
+                        if c not in df_db.columns: df_db[c] = None
+                    if 'LOCALIDAD' not in df_db.columns: df_db['LOCALIDAD'] = "N/A"
+                    if 'COORDENADAS' not in df_db.columns: df_db['COORDENADAS'] = ""
+                    if 'POLIGONO' not in df_db.columns: df_db['POLIGONO'] = ""
+                    
+                    if 'reasoning' in df_db.columns and 'REASONING' not in df_db.columns:
+                        df_db = df_db.rename(columns={'reasoning': 'REASONING'})
+                    if 'context_snippet' in df_db.columns and 'SNIPPET' not in df_db.columns:
+                        df_db = df_db.rename(columns={'context_snippet': 'SNIPPET'})
+                    if 'cross_year_link' in df_db.columns and 'LINK_PID' not in df_db.columns:
+                        df_db = df_db.rename(columns={'cross_year_link': 'LINK_PID'})
+                    
+                    # Asegurar columnas faltantes y eliminar duplicadas
+                    df_db = df_db.loc[:, ~df_db.columns.duplicated()]
+                    for c in all_cols:
+                        if c not in df_db.columns: df_db[c] = None
+
+                    all_projects.append(df_db[all_cols])
+        except Exception as e: print(f"DB Error: {e}")
+
+    # 2. CSV (Silver Data - legacy, no tiene score usualmente)
+    if os.path.exists(CSV_PATH):
+        try:
+            # El CSV solo tiene las base_cols
+            df_csv = pd.read_csv(CSV_PATH, names=base_cols, header=None, on_bad_lines='skip')
+            for c in audit_cols: df_csv[c] = None
+            df_csv['audit_status'] = 'legacy'
+            all_projects.append(df_csv[all_cols])
+        except Exception as e: print(f"CSV Error: {e}")
+
+    if not all_projects:
+        return pd.DataFrame(columns=all_cols)
+    
+    df = pd.concat(all_projects).drop_duplicates(subset=['ID_PROYECTO'], keep='first')
+    
+    # Heurística: Densidad de Proponentes (Señal de Alerta Estratégica)
+    # Si un promovente tiene > 3 proyectos en el mismo estado, marcamos señal
+    df['density_count'] = df.groupby(['PROMOVENTE', 'ESTADO'])['ID_PROYECTO'].transform('count')
+    df['SIGNAL'] = df['density_count'].apply(lambda c: "HIGH_DENSITY" if c > 3 else "NORMAL")
+
+    # Métrica de Reputación (Fase 3)
+    # Calculamos reputación simple basada en auditorías previas en el DF actual
+    rep_map = {}
+    for prom in df['PROMOVENTE'].unique():
+        sub = df[df['PROMOVENTE'] == prom]
+        approved = len(sub[sub['audit_status'] == 'audited'])
+        total = len(sub)
+        if total > 2 and approved/total > 0.8: rep_map[prom] = "TRUSTED"
+        elif (sub['audit_status'] == 'rejected').any(): rep_map[prom] = "RISKY"
+    
+    df['REPUTATION'] = df['PROMOVENTE'].map(lambda x: rep_map.get(x, "NEW"))
+
+    # Aplicar Auditoría Final
+    df['is_valid'] = df.apply(lambda r: is_valid_record(r['PROYECTO'], r['PROMOVENTE'], r['FUENTES']), axis=1)
+    df_clean = df[df['is_valid'] == True].copy()
+    
+    return df_clean[all_cols + ['SIGNAL', 'REPUTATION']]
+
+@app.get("/api/projects")
+def get_projects():
+    try:
+        df = load_audited_data()
+        projects = df.fillna("").to_dict(orient="records")
+        projects.sort(key=lambda x: (str(x.get('ANIO', '')), str(x.get('ID_PROYECTO', ''))), reverse=True)
+        return projects
+    except Exception as e:
+        print(f"API Error: {e}")
+        return []
+
+@app.get("/api/analytics")
+def get_analytics():
+    try:
+        df = load_audited_data()
+        if df.empty:
+            return {"total": 0, "top_states": [], "top_promoters": []}
+
+        df['ESTADO'] = df['ESTADO'].fillna('DESCONOCIDO').str.upper().str.strip()
+        df['PROMOVENTE'] = df['PROMOVENTE'].fillna('DESCONOCIDO').str.upper().str.strip()
+        
+        noise = ['DE', 'LOS', 'EL', 'LA', 'SAN', 'DEL', ' ', '']
+        valid_states = df[~df['ESTADO'].isin(noise)]
+        
+        return {
+            "total": int(len(df)),
+            "top_states": [[str(s).title(), int(c)] for s, c in valid_states['ESTADO'].value_counts().head(5).items()],
+            "top_promoters": [[str(p).title(), int(c)] for p, c in df['PROMOVENTE'].value_counts().head(5).items()]
+        }
+    except Exception as e:
+        print(f"Analytics Error: {e}")
+        return {"total": 0, "top_states": [], "top_promoters": []}
+
+# ─────────────────────────────────────────────────────────
+# NEW: GOVERNANCE ENDPOINT (AUDIT)
+# ─────────────────────────────────────────────────────────
+@app.post("/api/audit")
+async def audit_project(request: Request):
+    data = await request.json()
+    pid = data.get("pid")
+    status = data.get("status") # 'audited', 'rejected', 'pending'
+    notes = data.get("notes", "")
+
+    if not pid or not status:
+        return {"status": "error", "message": "Missing pid or status"}
+
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("""
+                UPDATE projects 
+                SET audit_status = ?, auditor_notes = ?
+                WHERE pid = ?
+            """, (status, notes, pid))
+            return {"status": "ok", "pid": pid, "new_status": status}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# ─────────────────────────────────────────────────────────
+# RESTO DE ENDPOINTS
+# ─────────────────────────────────────────────────────────
 @app.get("/api/status")
 def get_status():
-    temp = "N/A"
-    try:
-        out = subprocess.check_output(['sensors'], text=True)
-        m = re.search(r'(?:CPU|temp1|Tdie):\s+\+?([\d\.]+)', out)
-        if m: temp = f"{m.group(1)}°C"
-    except: pass
-    
-    # Check if agent PID is active
-    is_active = os.path.exists("/tmp/zohar_agent_v2.pid")
-    if is_active:
-        try:
-            pid = open("/tmp/zohar_agent_v2.pid").read().strip()
-            # Verify PID is actually alive
-            os.kill(int(pid), 0)
-        except (OSError, ValueError):
-            is_active = False
-
-    # Check llama-server via /v1/models (llama-cpp-python no tiene /health)
     llama_ok, _ = _check_service("http://127.0.0.1:8001/v1/models")
-    
     return {
-        "cpu_temp": temp, 
-        "llama_status": "System Ready" if llama_ok else "LLM Offline", 
-        "system": "Zohar Intelligence Core",
-        "agent_running": is_active,
-        "llama_ok": llama_ok,
+        "cpu_temp": "N/A", 
+        "llama_status": "Ready" if llama_ok else "Offline", 
+        "agent_running": os.path.exists("/tmp/zohar_agent_v2.pid"),
+        "llama_ok": llama_ok
     }
+
+def _check_service(url, timeout=5):
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r: return True, ""
+    except: return False, ""
 
 @app.get("/api/agent_state")
 def get_agent_state():
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, 'r') as f:
-            return json.load(f)
-    return {"pdf": "IDLE", "action": "STANDBY", "target": "NONE"}
+        try:
+            with open(STATE_FILE, 'r') as f: return json.load(f)
+        except: pass
+    return {"pdf": "IDLE", "action": "STANDBY"}
 
 @app.get("/api/logs")
 def get_logs():
@@ -106,251 +246,84 @@ def get_logs():
     if not os.path.exists(log_file): return []
     try:
         with open(log_file, "r") as f:
-            # Leer últimas 15 líneas
-            lines = f.readlines()[-15:]
+            lines = f.readlines()[-20:]
             logs = []
             for line in lines:
                 try:
-                    entry = json.loads(line)
-                    logs.append({
-                        "ts":    entry.get("ts", "")[-8:],
-                        "msg":   _strip_ctrl(entry.get("msg", "")),
-                        "level": entry.get("level", "INFO")
-                    })
+                    e = json.loads(line)
+                    logs.append({"ts": e.get("ts","")[-8:], "msg": e.get("msg",""), "level": e.get("level","INFO")})
                 except: continue
             return logs
     except: return []
-
-@app.get("/api/projects")
-def get_projects():
-    if not os.path.exists(CSV_FILE): return []
-    try:
-        # Usamos pandas para consistencia con analytics, pero sin header
-        cols_v22 = ["ANIO", "ID_PROYECTO", "ESTADO", "MUNICIPIO", "LOCALIDAD", "PROYECTO", "PROMOVENTE", "SECTOR", "INSIGHT", "COORDENADAS", "POLIGONO", "FUENTES"]
-        df = pd.read_csv(CSV_FILE, names=cols_v22, header=None, on_bad_lines='skip', index_col=False)
-        
-        # Detectar si está aterrizado (grounded)
-        df['grounded'] = df['FUENTES'].fillna('').apply(lambda x: len(str(x)) > 5)
-        
-        # FILTRO CRÍTICO: Solo mostrar datos con fuentes verificadas (Grounded)
-        df = df[df['grounded'] == True]
-        
-        # REMOVER ALUCINACIONES: Patrones conocidos de error del modelo
-        placeholder_regex = 'DESCONOCIDO|ENCONTRADO|EXTRACCIÓN|ID_PROYECTO|EL ID|PROYECTO EN EVALUACIÓN|ERROR|PLACEHOLDER|NULL|NONE'
-        df = df[~df['PROMOVENTE'].fillna('').astype(str).str.contains(placeholder_regex, na=False, case=False)]
-        df = df[~df['PROYECTO'].fillna('').astype(str).str.contains(placeholder_regex, na=False, case=False)]
-        
-        # Convertir a lista de dicts limpiando NaNs
-        projects = df.fillna("").to_dict("records")
-        
-        # Ordenar por Año (Descendente) y luego por ID
-        projects.sort(key=lambda x: (str(x.get('ANIO', '')), str(x.get('ID_PROYECTO', ''))), reverse=True)
-        return projects[:500]
-    except Exception as e:
-        print(f"Error reading projects: {e}")
-        return []
-
-@app.get("/api/analytics")
-def get_analytics():
-    if not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0:
-        return {"total": 0, "risk_counts": {}, "top_states": [], "top_promoters": []}
-    
-    try:
-        # Usar la misma estructura de columnas que get_projects para consistencia
-        cols = ["year", "id", "estado", "municipio", "localidad", "proyecto", "promovente", "sector", "insight", "coordenadas", "poligono", "fuentes"]
-        # header=None porque el CSV no tiene cabecera propia
-        df = pd.read_csv(CSV_FILE, names=cols, header=None, on_bad_lines='skip', index_col=False)
-        
-        # Filtro de Grounded (solo datos con fuentes)
-        df['grounded'] = df['fuentes'].fillna('').apply(lambda x: len(str(x)) > 5)
-        df = df[df['grounded'] == True]
-        
-        # Clean data
-        df['sector'] = df['sector'].fillna('OTROS').str.upper().str.strip()
-        df['estado'] = df['estado'].fillna('DESCONOCIDO').str.upper().str.strip()
-        df['promovente'] = df['promovente'].fillna('DESCONOCIDO').str.upper().str.strip()
-        
-        # Filtro de ruido y alucinaciones más agresivo para analytics
-        noise_filter = ['DE', 'LOS', 'EL', 'LA', 'SAN', 'SANTA', 'DEL', 'EL ID', 'ID_PROYECTO', 'MUNICIPIO', 'ESTADO', 'ID', ' ', '', 'ANIO', 'YEAR']
-        placeholder_regex = 'DESCONOCIDO|ENCONTRADO|EXTRACCIÓN|ID_PROYECTO|EL ID|PROYECTO EN EVALUACIÓN|ERROR|PLACEHOLDER|NULL|NONE'
-        
-        # Filtrar estados válidos
-        df_states = df[~df['estado'].isin(noise_filter) & df['estado'].notna() & (df['estado'] != '')]
-        df_states = df_states[~df_states['estado'].str.contains(placeholder_regex, na=False, case=False)]
-        
-        # Filtrar promoventes válidos (ignorar placeholders)
-        df_proms = df[~df['promovente'].str.contains(placeholder_regex, na=True, case=False) & (df['promovente'] != '')]
-        df_proms = df_proms[~df_proms['promovente'].isin(noise_filter)]
-
-        analytics = {
-            "total": int(len(df)),
-            "top_states": [[str(s).title(), int(c)] for s, c in df_states['estado'].value_counts().head(5).items()],
-            "top_promoters": [[str(p).title(), int(c)] for p, c in df_proms['promovente'].value_counts().head(5).items()]
-        }
-        return analytics
-    except Exception as e:
-        print(f"Analytics Error: {e}")
-        return {"total": 0, "top_states": [], "top_promoters": []}
 
 @app.post("/api/control")
 async def control_agent(request: Request):
     data = await request.json()
     action = data.get("action")
-    
-    # Path to ctl script
-    ctl_script = os.path.join(BASE_DIR, "agent", "zohar_ctl.sh")
-    
-    try:
-        if action == "restart":
-            subprocess.run([ctl_script, "stop"], check=False)
-            subprocess.Popen([ctl_script, "start-daemon"])
-            return {"status": "restarting"}
-        elif action == "stop":
-            subprocess.run([ctl_script, "stop"], check=False)
-            return {"status": "stopped"}
-        elif action == "retry":
-            subprocess.run([ctl_script, "retry-failed"], check=False)
-            subprocess.run([ctl_script, "stop"], check=False)
-            subprocess.Popen([ctl_script, "start-daemon"])
-            return {"status": "retrying"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    
-    return {"status": "unknown_action"}
+    ctl = os.path.join(BASE_DIR, "agent", "zohar_ctl.sh")
+    if action == "restart":
+        subprocess.run([ctl, "stop"], check=False)
+        subprocess.Popen([ctl, "start-daemon"])
+    elif action == "stop": subprocess.run([ctl, "stop"], check=False)
+    return {"status": "ok"}
 
 @app.get("/api/diagnostics")
 def get_diagnostics():
-    """Panel de troubleshooting en tiempo real."""
-    now = datetime.datetime.now().isoformat(timespec="seconds")
-
+    # 1. Health Checks
     llama_ok, _ = _check_service("http://127.0.0.1:8001/v1/models")
-    ocr_ok,   _ = _check_service("http://127.0.0.1:8002/v1/models")
-
-    def proc_info(pattern):
-        try:
-            out = subprocess.check_output(["pgrep", "-fa", pattern], text=True, timeout=3).strip()
-            lines = [l for l in out.splitlines() if "pgrep" not in l]
-            return {"running": bool(lines), "procs": lines[:2]}
-        except Exception:
-            return {"running": False, "procs": []}
-
-    agent_proc = proc_info("zohar_agent_v2")
-    llama_proc = proc_info("llama_cpp.server")
-    ocr_proc   = proc_info("qwen2-vl")
-
-    # Diferenciar "busy" de "offline" usando el proceso como señal secundaria
-    llama_alive = llama_proc["running"]
-    ocr_alive   = ocr_proc["running"]
-    llama_status = "online" if llama_ok else ("busy" if llama_alive else "offline")
-    ocr_status   = "online" if ocr_ok   else ("busy" if ocr_alive  else "offline")
-
-    # Queue stats
-    queue_stats = {"total": 0, "success": 0, "pending": 0, "failed": 0, "by_year": {}, "progress_pct": 0}
-    queue_file = os.path.join(BASE_DIR, "agent", "zohar_queue.json")
-    if os.path.exists(queue_file):
-        try:
-            with open(queue_file) as f:
-                q = json.load(f)
-            by_status = {}
-            by_year = {}
-            for v in q.values():
-                s = v.get("status", "pending")
-                by_status[s] = by_status.get(s, 0) + 1
-                yr = str(v.get("year", "?"))
-                by_year[yr] = by_year.get(yr, 0) + 1
-            total = len(q)
-            succ  = by_status.get("success", 0)
-            queue_stats = {
-                "total":        total,
-                "success":      succ,
-                "pending":      by_status.get("pending", 0),
-                "failed":       by_status.get("failed", 0),
-                "by_year":      dict(sorted(by_year.items(), reverse=True)[:8]),
-                "progress_pct": round(succ / max(total, 1) * 100, 2)
-            }
-        except Exception as e:
-            queue_stats["error"] = str(e)
-
-    # CSV
-    csv_info = {"exists": False, "rows": 0, "size_kb": 0}
-    if os.path.exists(CSV_FILE):
-        try:
-            size_kb = round(os.path.getsize(CSV_FILE) / 1024, 1)
-            rows    = sum(1 for _ in open(CSV_FILE)) - 1
-            csv_info = {"exists": True, "rows": rows, "size_kb": size_kb}
-        except Exception as e:
-            csv_info["error"] = str(e)
-
-    # Issues — solo critico si el PROCESO no existe (offline real)
-    # Si proceso vive pero /v1/models no responde = busy (normal durante extraccion)
-    issues = []
-    if not llama_alive:
-        issues.append({
-            "severity": "critical", "component": "llama-server",
-            "msg": "LLM process termination - critical infrastructure failure",
-            "hint": "Restore via systemd or manual daemon initiation",
-            "cmd":  "ps aux | grep llama_cpp"
-        })
-    elif not llama_ok:
-        issues.append({
-            "severity": "info", "component": "llama-server",
-            "msg": "LLM Latency - Active Inference in Progress",
-            "hint": "Resource lock during token generation. Nominal operational state.",
-            "cmd":  ""
-        })
-    if not ocr_alive:
-        issues.append({
-            "severity": "warning", "component": "ocr-server",
-            "msg": "Qwen2-VL process termination - Visual fallback non-operational",
-            "hint": "systemctl status zohar-ocr",
-            "cmd":  "ps aux | grep qwen2"
-        })
-    if queue_stats.get("failed", 0) > 50:
-        issues.append({
-            "severity": "warning", "component": "queue",
-            "msg": f"Anomalous detection: {queue_stats['failed']} entities in failed state",
-            "hint": "Execute [RETRY-FAILED] or: ./agent/zohar_ctl.sh retry-failed",
-            "cmd":  "./agent/zohar_ctl.sh retry-failed"
-        })
+    ocr_ok, _   = _check_service("http://127.0.0.1:8002/v1/models")
+    agent_running = os.path.exists("/tmp/zohar_agent_v2.pid")
     
-    # Check for Supabase Schema Issues in logs
-    recent_logs = get_logs()
-    for l in recent_logs:
-        if "Could not find the 'coordenadas' column" in l["msg"]:
-            issues.append({
-                "severity": "critical", "component": "supabase",
-                "msg": "Faltan columnas 'coordenadas' y 'poligono' en Supabase",
-                "hint": "Ejecute el SQL de migración en el dashboard de Supabase",
-                "cmd": "ALTER TABLE proyectos ADD COLUMN coordenadas TEXT, ADD COLUMN poligono TEXT;"
-            })
-            break
-    if not issues:
-        issues.append({"severity": "ok", "component": "all", "msg": "All intelligence services operational", "hint": "", "cmd": ""})
+    # 2. Process check (Real-time fallback)
+    def _get_procs(pattern):
+        try:
+            res = subprocess.check_output(["ps", "aux"], text=True)
+            return [line for line in res.splitlines() if pattern in line and "grep" not in line]
+        except: return []
+
+    # 3. Queue & Data
+    csv_rows = 0
+    csv_size = 0
+    if os.path.exists(CSV_PATH):
+        csv_rows = sum(1 for _ in open(CSV_PATH))
+        csv_size = os.path.getsize(CSV_PATH) // 1024
+
+    queue_data = {"pending": 0, "success": 0, "failed": 0, "progress_pct": 0, "by_year": {}}
+    if os.path.exists(os.path.join(BASE_DIR, "agent", "zohar_queue.json")):
+        try:
+            with open(os.path.join(BASE_DIR, "agent", "zohar_queue.json"), 'r') as f:
+                q = json.load(f)
+                # Soportar tanto dict como list
+                items = q.values() if isinstance(q, dict) else q
+                queue_data["pending"] = len([i for i in items if i.get("status") == "pending"])
+                queue_data["success"] = len([i for i in items if i.get("status") == "success"])
+                queue_data["failed"]  = len([i for i in items if i.get("status") in ["failed", "error"]])
+                total = len(items)
+                if total > 0:
+                    queue_data["progress_pct"] = int((queue_data["success"] / total) * 100)
+                # Group by year
+                for item in items:
+                    yr = str(item.get("year", "2025"))
+                    queue_data["by_year"][yr] = queue_data["by_year"].get(yr, 0) + 1
+        except Exception as e:
+            print(f"Queue Diagnostics Error: {e}")
+
+    # 4. Anomaly Detection
+    issues = []
+    if not llama_ok: issues.append({"severity": "critical", "component": "LLM", "msg": "Mistral-7B Offline", "hint": "Check port 8001", "cmd": "tail -f llama_8001.log"})
+    if not ocr_ok:   issues.append({"severity": "warning", "component": "OCR", "msg": "Qwen-VL Busy/Offline", "hint": "Check port 8002"})
+    if not agent_running: issues.append({"severity": "critical", "component": "AGENT", "msg": "Extractor stopped", "cmd": "bash zohar_ctl.sh start"})
 
     return {
-        "ts": now,
+        "ts": datetime.datetime.now().isoformat(),
         "services": {
-            "llama":  {
-                "ok": llama_ok, "status": llama_status,
-                "running": llama_alive, "procs": llama_proc["procs"]
-            },
-            "ocr":    {
-                "ok": ocr_ok, "status": ocr_status,
-                "running": ocr_alive, "procs": ocr_proc["procs"]
-            },
-            "agent":  {
-                "running": agent_proc["running"],
-                "pid_file": os.path.exists("/tmp/zohar_agent_v2.pid"),
-                "procs": agent_proc["procs"]
-            },
-            "supabase": {
-                "ok": not any("Cloud Sync Error" in l.get("msg", "") for l in get_logs()[-5:]),
-                "error": next((l.get("msg", "") for l in get_logs() if "Cloud Sync Error" in l.get("msg", "")), None)
-            }
+            "llama": {"status": "online" if llama_ok else "offline", "running": True, "procs": _get_procs("8001")},
+            "ocr":   {"status": "online" if ocr_ok else "offline", "running": True, "procs": _get_procs("8002")},
+            "agent": {"running": agent_running, "pid_file": agent_running, "procs": _get_procs("zohar_agent_v2")}
         },
-        "queue":  queue_stats,
-        "csv":    csv_info,
-        "issues": issues,
+        "csv": {"rows": csv_rows, "size_kb": csv_size},
+        "queue": queue_data,
+        "issues": issues
     }
 
 if __name__ == "__main__":

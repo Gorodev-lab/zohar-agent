@@ -1,0 +1,14 @@
+[Unit]
+Description=Zohar API Dashboard (FastAPI)
+After=network.target zohar-llama.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/gorops/proyectos antigravity/zohar-agent/api
+Environment="PATH=/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin:/usr/bin:/bin"
+ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" zohar_api.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

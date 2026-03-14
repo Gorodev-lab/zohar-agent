@@ -1,0 +1,11 @@
+[Unit]
+Description=Zohar SRE Automatic Backup Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=gorops
+ExecStart=/home/gorops/zohar_backup.sh
+
+[Install]
+WantedBy=multi-user.target

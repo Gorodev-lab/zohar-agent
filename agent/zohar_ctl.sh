@@ -136,6 +136,12 @@ for line in sys.stdin:
     python3 "$INSPECTOR" --watch
     ;;
 
+  dedup-rebuild)
+    _activate
+    echo "🧹 Re-escaneando histórico para vinculación semántica..."
+    python3 "$BASE_DIR/agent/zohar_dedup.py"
+    ;;
+
   retry-failed)
     [ ! -f "$QUEUE_FILE" ] && echo "No hay queue." && exit 1
     python3 -c "

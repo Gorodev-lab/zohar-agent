@@ -1,0 +1,57 @@
+/home/gorops/proyectos antigravity/zohar-agent/scripts/reprocess_failed.py:10: SyntaxWarning: "\ " is an invalid escape sequence. Such sequences will not work in the future. Did you mean "\\ "? A raw string is also an option.
+  cd ~/proyectos\ antigravity/zohar-agent
+
+============================================================
+  ZOHAR REPROCESS — Queue: /home/gorops/proyectos antigravity/zohar-agent/zohar_queue.json
+  Estado inicial: {'total': 0, 'success': 0, 'pending': 0, 'failed': 0}
+  Modo: REAL
+============================================================
+
+Consultando Supabase...
+  33 proyectos sin promovente en Supabase
+
+  [ADD]    23QR2026TD005 (2026) — txt: gaceta_0002-26.txt
+  [ADD]    10DU2025MD051 (2026) — txt: gaceta_0004-26.txt
+  [ADD]    18NA2026TD003 (2026) — txt: gaceta_0003-26.txt
+  [ADD]    10DU2025MD052 (2026) — txt: gaceta_0004-26.txt
+  [ADD]    11GU2025MD004 (2026) — txt: gaceta_0004-26.txt
+  [ADD]    31YU2026TD002 (2026) — txt: gaceta_0003-26.txt
+  [ADD]    31YU2026TD003 (2026) — txt: gaceta_0003-26.txt
+  [ADD]    31YU2026TD005 (2026) — txt: gaceta_0003-26.txt
+  [ADD]    18NA2025TD115 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    18NA2025TD118 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    19NL2025F0132 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    22QE2025HD095 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    30VE2025HD158 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    30VE2025HD164 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    31YU2025TD051 (2025) — txt: gaceta_0017-25.txt
+  [ADD]    31YU2025TD052 (2025) — txt: gaceta_0017-25.txt
+  [ADD]    31YU2025TD132 (2025) — txt: gaceta_0042-25.txt
+  [ADD]    31YU2025TD174 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    11GU2025UD115 (2025) — txt: gaceta_0003-26.txt
+  [ADD]    14JA2025HD178 (2025) — txt: gaceta_0003-26.txt
+  [ADD]    25SI2025PD069 (2025) — txt: gaceta_0003-26.txt
+  [ADD]    02BC2025TD127 (2025) — txt: gaceta_0004-26.txt
+  [ADD]    11GU2025UD140 (2025) — txt: gaceta_0003-26.txt
+  [ADD]    03BS2025HD091 (2025) — txt: gaceta_0004-26.txt
+  [ADD]    07CH2025H0031 (2025) — txt: gaceta_0045-25.txt
+  [ADD]    06CL2025V0043 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    03BS2025UD092 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    06CL2025MD041 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    11GU2025UD139 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    14JA2025HD202 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    14JA2025HD204 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    17MO2025ID041 (2025) — txt: gaceta_0002-26.txt
+  [ADD]    18NA2025MD116 (2025) — txt: gaceta_0002-26.txt
+
+============================================================
+  RESUMEN:
+    Reseteados a pending : 0
+    Agregados nuevos     : 33
+    Sin archivo local    : 0
+    Stats finales        : {'total': 33, 'success': 0, 'pending': 33, 'failed': 0}
+============================================================
+
+  Queue actualizada. Inicia el agente para reprocesar:
+  python agent/zohar_agent_v2.py
+

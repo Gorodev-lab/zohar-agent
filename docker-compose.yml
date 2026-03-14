@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  zohar-api:
+    build: .
+    container_name: zohar-api
+    ports:
+      - "8081:8081"
+    volumes:
+      - zohar-data:/root
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: uvicorn api.zohar_api:app --host 0.0.0.0 --port 8081
+
+  zohar-agent:
+    build: .
+    container_name: zohar-agent
+    volumes:
+      - zohar-data:/root
+      - ./.env:/app/.env
+    env_file:
+      - .env
+    restart: unless-stopped
+    command: python agent/zohar_agent_v2.py
+    depends_on:
+      - zohar-api
+
+volumes:
+  zohar-data:
+    driver: local

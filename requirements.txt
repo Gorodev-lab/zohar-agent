@@ -1,0 +1,12 @@
+python-dotenv
+supabase
+pandas
+pdf2image
+selenium
+webdriver-manager
+google-genai
+fastapi
+uvicorn
+pytest
+pytest-asyncio
+httpx

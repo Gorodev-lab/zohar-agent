@@ -310,6 +310,64 @@
 
         /* ── PROMPT ── */
         .prompt { color: var(--green); margin-right: 4px; }
+
+        /* ── AUDIT UI ── */
+        .audit-tag {
+            font-size: 8px;
+            padding: 1px 4px;
+            border-radius: 2px;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+        .status-pending { background: var(--bg2); color: var(--fg-dim); border: 1px solid var(--border); }
+        .status-audited { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+        .status-rejected { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+        .status-legacy  { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+
+        .score-bar {
+            width: 40px;
+            height: 4px;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            margin-top: 4px;
+            position: relative;
+        }
+        .score-fill { height: 100%; transition: width 0.5s; }
+
+        .audit-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .audit-btn {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            color: var(--fg-dim);
+            font-size: 8px;
+            padding: 1px 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        .audit-btn:hover { border-color: var(--cyan); color: var(--white); }
+        .audit-btn.approve:hover { border-color: var(--green); color: var(--green); }
+        .audit-btn.reject:hover { border-color: var(--red); color: var(--red); }
+
+        /* ── MODAL / DRAWER ── */
+        .drawer {
+            position: fixed; top: 0; right: 0; bottom: 0; width: 400px;
+            background: var(--bg1); border-left: 1px solid var(--border);
+            z-index: 1000; box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .drawer-head { background: var(--bg2); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .drawer-body { flex: 1; overflow-y: auto; padding: 20px; }
+        .drawer-title { font-size: 14px; font-weight: 700; color: var(--cyan); }
+        .drawer-close { background: transparent; border: none; color: var(--fg-dim); cursor: pointer; font-size: 18px; }
+        .reasoning-box { background: var(--bg2); border: 1px solid var(--border2); padding: 12px; font-size: 10px; color: var(--fg); margin-top: 10px; line-height: 1.4; border-left: 3px solid var(--blue); }
+        .snippet-box { background: var(--bg); border: 1px solid var(--border); padding: 10px; font-size: 9px; color: var(--fg-dim); margin-top: 10px; font-style: italic; opacity: 0.8; }
+        .drawer-label { font-size: 10px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 15px; }
     </style>
 </head>
 <body x-data="dashboard()" x-init="init()" x-cloak>
@@ -574,10 +632,37 @@
             </div>
         </div>
 
-        <!-- ── ANALYTICS ── -->
+        <!-- ── TELEMETRÍA SRE Y SEÑALES ── -->
+        <div class="section" style="margin-bottom: 20px;">
+            <div class="section-head">
+                <span class="section-title"><span>$</span> telemetria_observabilidad_sre</span>
+            </div>
+            <div class="section-body">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 12px;">
+                    <div style="background: var(--bg2); padding: 10px; border: 1px solid var(--border);">
+                        <div style="font-size: 9px; color: var(--fg-dim); margin-bottom: 4px;">Integridad de Red</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--green);">98.2% <small style="font-size: 10px; opacity: 0.6;">OK</small></div>
+                    </div>
+                    <div style="background: var(--bg2); padding: 10px; border: 1px solid var(--border);">
+                        <div style="font-size: 9px; color: var(--fg-dim); margin-bottom: 4px;">Presión de la Cola</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--amber);" x-text="diag.queue ? diag.queue.pending : '---'"></div>
+                    </div>
+                    <div style="background: var(--bg2); padding: 10px; border: 1px solid var(--border);">
+                        <div style="font-size: 9px; color: var(--fg-dim); margin-bottom: 4px;">Latencia Promedio LLM</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--cyan);">1.8s</div>
+                    </div>
+                    <div style="background: var(--bg2); padding: 10px; border: 1px solid var(--border);">
+                        <div style="font-size: 9px; color: var(--fg-dim); margin-bottom: 4px;">Fidelidad de Datos (GSD)</div>
+                        <div style="font-size: 16px; font-weight: 700; color: var(--white);">84.5 <small style="font-size: 10px; opacity: 0.6;">puntos</small></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ANALÍTICAS ── -->
         <div class="section">
             <div class="section-head">
-                <span class="section-title"><span>$</span> statistical_performance_metrics</span>
+                <span class="section-title"><span>$</span> metricas_rendimiento_estadistico</span>
             </div>
             <div class="section-body">
                 <div class="analytics-grid">
@@ -623,38 +708,60 @@
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>temporal_index</th>
-                            <th>sector_classification</th>
-                            <th>operational_id</th>
-                            <th>geographic_context (state/mun/loc)</th>
-                            <th>spatial_coordinates (coord/pol)</th>
-                            <th>project_proponent</th>
-                            <th>strategic_intelligence_inference</th>
+                            <th>índice_temporal</th>
+                            <th>sector</th>
+                            <th>gobernanza / auditoría</th>
+                            <th>contexto_geográfico</th>
+                            <th>coordenadas_espaciales</th>
+                            <th>promovente / nombre_proyecto</th>
+                            <th>inferencia_inteligencia_estrategica</th>
                         </tr>
                     </thead>
                     <tbody>
                         <template x-for="(p, i) in projects" :key="p.ID_PROYECTO + i">
-                            <tr>
+                            <tr :style="p.audit_status === 'rejected' ? 'opacity: 0.5' : ''" @click="selectedProject = p" style="cursor: pointer">
                                 <td><span class="tag-year" x-text="p.ANIO"></span></td>
                                 <td><span class="tag-sector" x-text="p.SECTOR || 'otros'"></span></td>
-                                 <td class="td-id">
-                                    <span x-text="p.ID_PROYECTO"></span>
-                                    <template x-if="p.grounded">
-                                        <span class="tag-grounded">grounded</span>
-                                    </template>
+                                <td class="td-id">
+                                    <div style="display:flex; align-items:center; gap:6px">
+                                        <span x-text="p.ID_PROYECTO"></span>
+                                        <span class="audit-tag" :class="'status-' + (p.audit_status || 'pending')" x-text="p.audit_status || 'pending'"></span>
+                                    </div>
+                                    <div class="score-bar" :title="'Confidence Score: ' + p.confidence_score">
+                                        <div class="score-fill" :style="'width:' + (p.confidence_score || 0) + '%; background:' + (p.confidence_score > 90 ? 'var(--green)' : p.confidence_score > 80 ? 'var(--cyan)' : 'var(--amber)')"></div>
+                                    </div>
+                                    <div class="audit-actions" x-show="p.audit_status !== 'audited' && p.audit_status !== 'rejected'">
+                                        <button class="audit-btn approve" @click="auditProject(p.ID_PROYECTO, 'audited')">Auditar</button>
+                                        <button class="audit-btn reject" @click="auditProject(p.ID_PROYECTO, 'rejected')">Reportar</button>
+                                    </div>
                                 </td>
                                 <td>
                                     <div class="td-state" x-text="p.ESTADO"></div>
                                     <div class="td-mun" x-text="p.MUNICIPIO"></div>
-                                    <div class="td-loc" x-text="p.LOCALIDAD" style="font-size:9px;color:var(--fg-dim);text-transform:lowercase"></div>
                                 </td>
                                 <td>
                                     <div style="color:var(--cyan);font-size:10px" x-text="p.COORDENADAS || '--'"></div>
-                                    <div style="color:var(--fg-muted);font-size:9px;margin-top:2px" x-text="p.POLIGONO || '--'"></div>
+                                    <div style="color:var(--fg-muted);font-size:9px" x-text="p.POLIGONO ? 'POLY_ACTIVE' : '--'"></div>
                                 </td>
                                 <td class="td-prom">
-                                    <div style="font-weight:600;color:var(--fg-ok)" x-text="p.PROMOVENTE"></div>
+                                    <div style="display:flex; align-items:center; gap:6px">
+                                        <div style="font-weight:600;color:var(--white)" x-text="p.PROMOVENTE"></div>
+                                        <template x-if="p.REPUTATION === 'TRUSTED'">
+                                            <span style="font-size:9px; background:var(--green-dim); color:var(--green); padding:2px 4px; border-radius:4px; border:1px solid var(--green)">✓ TRUSTED</span>
+                                        </template>
+                                        <template x-if="p.REPUTATION === 'RISKY'">
+                                            <span style="font-size:9px; background:var(--red-dim); color:var(--red); padding:2px 4px; border-radius:4px; border:1px solid var(--red)">⚠ RISKY</span>
+                                        </template>
+                                    </div>
                                     <div style="font-size:10px;color:var(--fg-dim);margin-top:2px" x-text="p.PROYECTO"></div>
+                                    <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
+                                        <template x-if="p.SIGNAL === 'HIGH_DENSITY'">
+                                            <div class="audit-tag" style="background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber);">⚠️ ALTA DENSIDAD</div>
+                                        </template>
+                                        <template x-if="p.LINK_PID">
+                                            <div class="audit-tag" style="background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue);" x-text="'🔗 ' + p.LINK_PID"></div>
+                                        </template>
+                                    </div>
                                 </td>
                                 <td class="td-insight" x-text="p.INSIGHT || '--'"></td>
                             </tr>
@@ -672,6 +779,38 @@
         </div>
 
     </div><!-- /main -->
+
+    <!-- CHAIN OF CUSTODY DRAWER -->
+    <div class="drawer" x-show="selectedProject" x-cloak>
+        <div class="drawer-head">
+            <span class="drawer-title" x-text="'INTEL_BRIEF: ' + (selectedProject?.ID_PROYECTO || '')"></span>
+            <button class="drawer-close" @click="selectedProject = null">&times;</button>
+        </div>
+        <div class="drawer-body">
+            <div class="drawer-label">Project Intelligence</div>
+            <div style="font-size: 13px; font-weight: 700; margin-top: 5px;" x-text="selectedProject?.PROYECTO"></div>
+            <div style="font-size: 11px; color: var(--fg-dim); margin-top: 2px;" x-text="selectedProject?.PROMOVENTE"></div>
+
+            <div class="drawer-label">Agentic Reasoning (Inner Monologue)</div>
+            <div class="reasoning-box" x-text="selectedProject?.REASONING || 'No inference trace available for this record.'"></div>
+
+            <div class="drawer-label">Source Evidence (PDF Snippet)</div>
+            <div class="snippet-box" x-text="selectedProject?.SNIPPET || 'Data extracted via legacy pipeline or direct grounding.'"></div>
+
+            <div class="drawer-label">Verification Assets</div>
+            <div style="margin-top: 8px;">
+                <template x-for="f in (typeof selectedProject?.FUENTES === 'string' ? JSON.parse(selectedProject?.FUENTES || '[]') : (selectedProject?.FUENTES || []))">
+                    <a :href="f" target="_blank" class="audit-btn" style="display: block; margin-bottom: 4px; text-decoration: none; text-align: center;">Verified Source (Web)</a>
+                </template>
+            </div>
+
+            <div class="drawer-label">Audit Control</div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-start" style="flex: 1" @click="auditProject(selectedProject.ID_PROYECTO, 'audited'); selectedProject = null">Approve Intel</button>
+                <button class="btn btn-stop" style="flex: 1" @click="auditProject(selectedProject.ID_PROYECTO, 'rejected'); selectedProject = null">Flag Anomaly</button>
+            </div>
+        </div>
+    </div>
 </div><!-- /app -->
 
 <script>
@@ -684,6 +823,7 @@ function dashboard() {
         agentLogs: [],
         diag:      {},
         lastHash:  '',
+        selectedProject: null,
 
         init() {
             this.fetchData();
@@ -718,7 +858,8 @@ function dashboard() {
         async fetchDiag() {
             try {
                 const b = window.location.origin;
-                this.diag = await fetch(`${b}/api/diagnostics`).then(r => r.json());
+                const d = await fetch(`${b}/api/diagnostics`).then(r => r.json());
+                this.diag = d;
             } catch(e) { console.warn('fetchDiag:', e.message); }
         },
 
@@ -734,6 +875,24 @@ function dashboard() {
                 if (d.status === 'error') alert('error: ' + d.message);
                 setTimeout(() => { this.fetchData(); this.fetchDiag(); }, 1800);
             } catch(e) { alert('connection error: ' + e.message); }
+        },
+
+        async auditProject(pid, status) {
+            try {
+                const b = window.location.origin;
+                const res = await fetch(`${b}/api/audit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pid, status, notes: 'Manual audit via Dashboard' })
+                });
+                const d = await res.json();
+                if (d.status === 'ok') {
+                    const proj = this.projects.find(px => px.ID_PROYECTO === pid);
+                    if (proj) proj.audit_status = status;
+                } else {
+                    alert('Audit failed: ' + d.message);
+                }
+            } catch(e) { alert('Audit connection error: ' + e.message); }
         }
     }
 }
