@@ -888,8 +888,13 @@ function dashboard() {
         async fetchDiag() {
             try {
                 const b = window.location.origin;
-                const d = await fetch(`${b}/api/diagnostics`, { headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
-                this.diag = d;
+                const h = { 'bypass-tunnel-reminder': 'true' };
+                const res = await fetch(`${b}/api/diagnostics`, { headers: h });
+                if (!res.ok) return;
+                const ct = res.headers.get('content-type');
+                if (ct && ct.includes('application/json')) {
+                    this.diag = await res.json();
+                }
             } catch(e) { console.warn('fetchDiag:', e.message); }
         },
 
@@ -924,6 +929,9 @@ function dashboard() {
                     },
                     body: JSON.stringify({ pid, status, notes: 'Manual audit via Dashboard' })
                 });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const ct = res.headers.get('content-type');
+                if (!ct || !ct.includes('application/json')) throw new Error('Response is not JSON (Tunnel Down?)');
                 const d = await res.json();
                 if (d.status === 'ok') {
                     const proj = this.projects.find(px => px.ID_PROYECTO === pid);

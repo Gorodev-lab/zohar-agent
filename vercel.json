@@ -14,11 +14,11 @@
     },
     {
       "source": "/api/cloud-status",
-      "destination": "/api/status.js"
+      "destination": "/api/cloud-status.js"
     },
     {
-      "source": "/api/:path*",
-      "destination": "https://puny-meals-strive.loca.lt/api/:path*"
+      "source": "/api/(status|agent_state|projects|analytics|logs|control|audit|diagnostics)",
+      "destination": "https://puny-meals-strive.loca.lt/api/$1"
     },
     {
       "source": "/(.*)",
