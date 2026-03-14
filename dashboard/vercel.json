@@ -10,7 +10,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://loose-wombats-turn.loca.lt/api/:path*"
+      "destination": "https://honest-cougars-go.loca.lt/api/:path*"
     }
   ]
 }
