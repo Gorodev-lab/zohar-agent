@@ -18,12 +18,12 @@ URLs clave:
   Portal API     : https://apps1.semarnat.gob.mx/ws-bitacora-tramite/proyectos/{id}
 """
 
-import os, re, json, csv, time, signal, logging, datetime, sys
+import os, re, json, csv, time, signal, logging, datetime, sys, sqlite3
 import subprocess, urllib.request, urllib.error, urllib.parse
 import hashlib
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
-from typing import Optional
+from typing import Optional, Any
 
 try:
     from dotenv import load_dotenv
@@ -52,13 +52,24 @@ try:
 except ImportError:
     pass
 
+try:
+    from google import genai
+    from google.genai import types
+    from google.genai.errors import ClientError
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    gemini_client = None
+    if GEMINI_API_KEY:
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+except ImportError:
+    gemini_client = None
+
 # ─────────────────────────────────────────────────────────
 # CONFIGURACIÓN
 # ─────────────────────────────────────────────────────────
 HOME = Path.home()
 AGENT_DIR = Path(__file__).resolve().parent
 
-CONFIG = {
+CONFIG: dict[str, Any] = {
     # Dirs & Files
     "WORK_DIR":     HOME / "gaceta_work",
     "DOCS_DIR":     HOME / "gaceta_work" / "documentos",
@@ -66,43 +77,46 @@ CONFIG = {
     "STATE_FILE":   HOME / "zohar_agent_state.json",
     "QUEUE_FILE":   AGENT_DIR / "zohar_queue.json",
     "LOG_FILE":     AGENT_DIR / "zohar_agent.jsonl",
-    "SEEN_FILE":    AGENT_DIR / "zohar_seen_gacetas.json",  # hash de gacetas ya procesadas
+    "SEEN_FILE":    AGENT_DIR / "zohar_seen_gacetas.json",
     "GRAPH_FILE":   HOME / "zohar_grafo.triples",
+    "DB_FILE":      HOME / "zohar_intelligence.db",
+    "PROMPTS_DIR":  AGENT_DIR / "prompts",
 
-    # Llama server (Qwen 1.5B / Mistral / Granite)
+    # LLM — DeepSeek R1 Distill (OpenAI-compatible chat format)
     "LLAMA_URL":    os.environ.get("LLAMA_URL", "http://127.0.0.1:8001/v1/chat/completions"),
     "LLAMA_HEALTH": os.environ.get("LLAMA_HEALTH", "http://127.0.0.1:8001/v1/models"),
     "OCR_URL":      os.environ.get("OCR_URL", "http://127.0.0.1:8002/v1/chat/completions"),
-    "MODEL":        os.environ.get("ZOHAR_MODEL", "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"),
-    "TEMPERATURE":  float(os.environ.get("ZOHAR_TEMP", "0.2")),
-    "MAX_TOKENS":   int(os.environ.get("ZOHAR_MAX_TOKENS", "1000")),
+    "MODEL":        os.environ.get("ZOHAR_MODEL", "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf"),
+    "TEMPERATURE":  float(os.environ.get("ZOHAR_TEMP", "0.1")),
+    "MAX_TOKENS":   int(os.environ.get("ZOHAR_MAX_TOKENS", "1500")),
 
-    # SEMARNAT — IMPORTANTE: HTTP puro (no HTTPS), el servidor usa :8080
+    # SEMARNAT URLs
     "GACETA_LIST_URL":  "http://sinat.semarnat.gob.mx/Gaceta/gacetapublicacion/?ai={year}",
     "GACETA_PDF_BASE":  "http://sinat.semarnat.gob.mx/Gacetas/archivos{year}/",
     "PORTAL_API_BASE":  "https://apps1.semarnat.gob.mx/ws-bitacora-tramite/proyectos/",
     "PORTAL_URL":       "https://app.semarnat.gob.mx/consulta-tramite/#/portal-consulta",
 
-    # Extracción
+    # Extracción — calibrado para DeepSeek en CPU (Ryzen 5)
     "MAX_RETRIES":       3,
-    "RETRY_BASE_WAIT":   10,      # segundos, backoff: 10→20→40
+    "RETRY_BASE_WAIT":   10,
     "COOL_DOWN_NORMAL":  6,
     "COOL_DOWN_HOT":     20,
     "TEMP_WARN":         76.0,
     "TEMP_CRIT":         85.0,
-    "LLAMA_TIMEOUT":     600, # Tolerancia máxima para inferencia completa
-    "CONTEXT_CHARS":     6000, # Aumentar el contexto alimenta mejor el insight descriptivo
+    "LLAMA_TIMEOUT":     int(os.environ.get("ZOHAR_LLAMA_TIMEOUT", "300")),
+    "CONTEXT_CHARS":     int(os.environ.get("ZOHAR_CONTEXT_CHARS", "4000")),
 
     # Ciclo de monitoreo
-    "POLL_INTERVAL_MIN": 30,      # minutos entre chequeos de nuevas gacetas
-    "YEARS":             list(range(2005, 2027)), # Barrido completo por defecto
+    "POLL_INTERVAL_MIN": 30,
+    "YEARS":             [2026, 2025, 2024],
     "DRY_RUN":           False,
-    "DAEMON_MODE":       False,   # True = corre indefinidamente
+    "DAEMON_MODE":       False,
 }
 
 # Regex ID SEMARNAT: 2 dígitos + 2 letras + 4 dígitos + 2-5 alfanum
 # Ejemplos: 23QR2025TD077, 21PU2025H0155, 20OA2025V0090
 ID_PATTERN = re.compile(r'\b\d{2}[A-Z]{2}\d{4}[A-Z0-9]{2,5}\b')
+PDF_LINK_PATTERN = re.compile(r'archivos\d+/gaceta_\d+-\d+\.pdf')
 
 # ─────────────────────────────────────────────────────────
 # LOGGER (JSON Lines + consola legible)
@@ -195,9 +209,9 @@ class PersistentQueue:
             if tmp.exists():
                 tmp.replace(self.path)
             else:
-                log.error(f"  ⚠️  Fallo crítico al guardar cola: {tmp} no se generó.")
+                logging.getLogger("zohar").error(f"  ⚠️  Fallo crítico al guardar cola: {tmp} no se generó.")
         except Exception as e:
-            log.error(f"  ❌ Error de I/O al guardar cola: {e}")
+            logging.getLogger("zohar").error(f"  ❌ Error de I/O al guardar cola: {e}")
 
     def add(self, pid, pdf, year, txt_file) -> bool:
         if pid in self._d:
@@ -287,6 +301,167 @@ class SeenGacetas:
         return False
 
 
+# ─────────────────────────────────────────────────────────
+# LOCAL MEMORY (Cap. 16 - SQLite)
+# ─────────────────────────────────────────────────────────
+class LocalIntelligenceMemory:
+    """Gestiona la memoria a largo plazo del agente usando SQLite."""
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self._init_db()
+
+    def _init_db(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS projects (
+                        pid TEXT PRIMARY KEY,
+                        year INTEGER,
+                        promovente TEXT,
+                        proyecto TEXT,
+                        estado TEXT,
+                        municipio TEXT,
+                        sector TEXT,
+                        insight TEXT,
+                        grounded BOOLEAN,
+                        sources TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_grounded ON projects(grounded)")
+        except Exception as e:
+            logging.getLogger("zohar").error(f"  ❌ Error inicializando DB: {e}")
+
+    def project_exists(self, pid: str) -> bool:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cur = conn.execute("SELECT 1 FROM projects WHERE pid = ?", (pid,))
+                return cur.fetchone() is not None
+        except Exception:
+            return False
+
+    def store_project(self, pid: str, year: int, d: dict):
+        try:
+            # d.get("grounded", False) might be a string "True"/"False" from some extractions
+            is_grounded = str(d.get("grounded", "False")).lower() == "true"
+            if d.get("fuentes_web"): is_grounded = True
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO projects 
+                    (pid, year, promovente, proyecto, estado, municipio, sector, insight, grounded, sources)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    pid, year, d.get("promovente"), d.get("proyecto"), d.get("estado"),
+                    d.get("municipio"), d.get("sector"), d.get("insight"),
+                    1 if is_grounded else 0, json.dumps(d.get("fuentes_web", []))
+                ))
+        except Exception as e:
+            logging.getLogger("zohar").error(f"  ❌ Error guardando en DB: {e}")
+
+    def get_stats(self) -> dict:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                total = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+                grounded = conn.execute("SELECT COUNT(*) FROM projects WHERE grounded = 1").fetchone()[0]
+                return {"total_db": total, "grounded_db": grounded}
+        except Exception:
+            return {"total_db": 0, "grounded_db": 0}
+
+# ─────────────────────────────────────────────────────────
+# PROMPT ARCHIVE MANAGER (Cap. 10 - Filesystem Governance)
+# ─────────────────────────────────────────────────────────
+class PromptManager:
+    """Carga y gestiona plantillas de prompts externos para estandarización."""
+    def __init__(self, prompts_dir: Path):
+        self.prompts_dir = prompts_dir
+        self.prompts_dir.mkdir(parents=True, exist_ok=True)
+        self._cache = {}
+
+    def get_prompt(self, name: str, default_content: str) -> str:
+        if name in self._cache:
+            return self._cache[name]
+        
+        prompt_path = self.prompts_dir / f"{name}.txt"
+        if prompt_path.exists():
+            content = prompt_path.read_text(encoding="utf-8")
+        else:
+            prompt_path.write_text(default_content, encoding="utf-8")
+            content = default_content
+            
+        self._cache[name] = content
+        return content
+
+# Instancias Globales
+memory: Optional[LocalIntelligenceMemory] = None
+prompts: Optional[PromptManager] = None
+
+DEFAULT_LOC_FINDER = """\
+<instruction>
+Eres un perito experto en lectura de gacetas SEMARNAT. Tu objetivo es encontrar el fragmento exacto que describe la ubicación de un proyecto.
+</instruction>
+
+<task>
+Busca en el texto el proyecto con ID {pid}. 
+Extrae ÚNICAMENTE el fragmento de texto (oración o tabla) donde se menciona el ESTADO y el MUNICIPIO o LOCALIDAD de este proyecto específico.
+</task>
+
+<context>
+{context}
+</context>
+
+Si no encuentras el municipio pero sí el estado, copia el fragmento del estado.
+Responde SOLAMENTE con el fragmento hallado. Si no hay nada claro, responde "NO_HALLADO".
+"""
+
+DEFAULT_EXTRACTION_PROMPT = """\
+<system_instruction>
+Act as an Esoteria Intelligence Infrastructure Architect. Your mission is to convert fragmented gubernamental data into governed, grounded intelligence. 
+You are an expert in forensic document analysis. YOUR DEFINING FEATURE IS STRUCTURE.
+You are immune to tabular noise, proximal project IDs, and hallucination loops.
+</system_instruction>
+
+<schema_definition>
+{{
+  "PROMOVENTE": "Legal entity or person responsible (pristine name).",
+  "PROYECTO": "Official project title (remove tabular headers).",
+  "ESTADO": "Full Mexican State name (no abbreviations).",
+  "MUNICIPIO": "Specific municipality (LEAVE EMPTY if only placeholders like 'ID_PROYECTO' are found).",
+  "LOCALIDAD": "Specific site or locality.",
+  "COORDENADAS": "Latitude/Longitude precisely as written.",
+  "POLIGONO": "Geometric vertices if available.",
+  "SECTOR": "One of: [ENERGÍA, MINERÍA, TURISMO, INFRAESTRUCTURA, HIDROCARBUROS, AGROINDUSTRIA, OTROS].",
+  "INSIGHT": "Structured Intelligence Brief (2-3 sentences). Start with an ACTION VERB. Focus on environmental risk architecture."
+}}
+</schema_definition>
+
+<governance_rules>
+1. GROUNDING MANDATE: Every field must be derived from the PROVIDED TEXT. If data is ambiguous, LEAVE IT EMPTY.
+2. ZERO HALLUCINATION: Prohibited terms (Case Insensitive): [DESCONOCIDO, NA, NULL, ID_PROYECTO, EL ID, NOMBRE ESPECIFICO].
+3. INFRASTRUCTURE FOCUS: Extract for durability. Do not guess. Do not 'summarize' - MODEL the data.
+4. DOUBLE-QUOTE ENFORCEMENT: Output MUST be a single JSON object. All keys and values must be double-quoted.
+</governance_rules>
+
+<chain_of_thought_analysis>
+Identify the target PID: {pid}.
+Step 1: Locate the project anchor in the text.
+Step 2: Isolate the surrounding cell structure to separate metadata headers from actual values.
+Step 3: Verify the 'Promovente' has a legal structure (S.A. de C.V., C.P., etc.) or clear personal name.
+Step 4: Cross-reference the Estado code from {pid} (first 2 digits) with the text extracted.
+Step 5: Synthesize a high-fidelity Insight based on the project's scale and sector.
+</chain_of_thought_analysis>
+
+<location_context_snippet>
+{location_snippet}
+</location_context_snippet>
+
+<full_text_context>
+{context}
+</full_text_context>
+
+OUTPUT REQUIREMENT:
+Generate a detailed <razonamiento> block followed by a clean <output_json> block containing only the JSON.
+"""
 # ─────────────────────────────────────────────────────────
 # THERMAL MONITOR
 # ─────────────────────────────────────────────────────────
@@ -417,7 +592,14 @@ def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[s
     if html is None or html == "":
         return []
 
-    # Usar pandas para la deduplicación y limpieza, asegurando que la info está "aterrizada"
+    # Extraer links usando regex
+    found = PDF_LINK_PATTERN.findall(html)
+    pdf_links = [f"http://sinat.semarnat.gob.mx/Gacetas/{l}" for l in found]
+
+    if not pdf_links:
+        return []
+
+    # Usar pandas para la deduplicación y limpieza
     try:
         df = pd.DataFrame({"url": pdf_links})
         df = df.drop_duplicates().reset_index(drop=True)
@@ -425,7 +607,7 @@ def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[s
     except Exception:
         pdf_links = sorted(set(pdf_links))
 
-    pdf_links = sorted(set(pdf_links)) # doble check
+    pdf_links = sorted(set(pdf_links)) 
     log.info(f"  📄 {len(pdf_links)} PDFs encontrados usando métodos avanzados.")
     return pdf_links
 
@@ -449,7 +631,7 @@ def pid_in_csv(pid: str) -> bool:
                     return True
         return False
     except Exception as e:
-        log.error(f"  ⚠️ Error verificando PID en CSV: {e}")
+        logging.getLogger("zohar").error(f"  ⚠️ Error verificando PID en CSV: {e}")
         return False
 
 def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
@@ -488,9 +670,12 @@ def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
     txt = txt_path.read_text(errors="replace")
     ids = sorted(set(ID_PATTERN.findall(txt)))
 
+    MAX_IDS_PER_PDF = 10 # No saturar la cola, avanzar gradual
     new_count = 0
     for pid in ids:
-        if pid_in_csv(pid) or queue.is_done(pid):
+        if new_count >= MAX_IDS_PER_PDF: break
+        # Si ya está en cola o en CSV, saltar
+        if pid in queue._d or pid_in_csv(pid):
             continue
         if queue.add(pid=pid, pdf=filename, year=year, txt_file=str(txt_path)):
             new_count += 1
@@ -550,15 +735,12 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
         if re.search(r'^(EL\s+)?ID(_PROYECTO)?$', text_up): return True
         return False
 
-    # Limpiar Municipio
-    if is_noise(raw_mun) or raw_mun in ["GENERICO", "GENÉRICO", "NONE", "CABECERA MUNICIPAL"]:
+    # Limpiar Municipio — lista completa de términos de basura
+    MUN_BLOCKLIST = {"GENERICO", "GENÉRICO", "NONE", "NULL", "CABECERA MUNICIPAL", "N/A", "NA", "DESCONOCIDO", "VARIOS"}
+    if is_noise(raw_mun) or raw_mun in MUN_BLOCKLIST:
         data["municipio"] = ""
     else:
         mun = raw_mun
-        # Eliminar términos genéricos que no son nombres
-        generic_terms = ["CABECERA MUNICIPAL", "MUNICIPIO", "GENERICO", "GENÉRICO", "VARIOS", "ESTADO"]
-        if any(term == mun for term in generic_terms):
-            mun = ""
 
         # En esta versión, si no hay municipio claro, se queda vacío.
         corrections = {
@@ -585,11 +767,13 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
         data["localidad"] = raw_loc
 
     # Limpiar Proyecto
-    if is_noise(raw_proj) or any(term in raw_proj for term in ["PROMOVENTE", "FECHA DE INGRESO"]):
+    if is_noise(raw_proj) or any(term in raw_proj for term in ["PROMOVENTE", "FECHA DE INGRESO", "{", "}"]):
         data["proyecto"] = "PROYECTO EN EVALUACIÓN"
+    else:
+        data["proyecto"] = raw_proj
     
     # Limpiar Promovente
-    if is_noise(raw_prom) or "NOMBRE LEGAL" in raw_prom.upper():
+    if is_noise(raw_prom) or "NOMBRE LEGAL" in raw_prom.upper() or "{" in raw_prom or "[" in raw_prom:
         data["promovente"] = "DESCONOCIDO"
     else:
         data["promovente"] = raw_prom
@@ -626,8 +810,11 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
             val = re.sub(r'(?i)PROMOVIDO POR.*', '', val)
             val = re.sub(r'(?i)ESTADO DE\s+', '', val)
             val = re.sub(r'(?i)MUNICIPIO DE\s+', '', val)
+            # Capitalizar correctamente. NO usar abreviaturas — la BD necesita nombres completos.
+            if k in ["estado", "municipio", "localidad"]:
+                val = val.title()
             val = re.sub(r'\s+', ' ', val).strip()
-            if k not in ["descripcion", "insight", "coordenadas", "poligono"]:
+            if k not in ["descripcion", "insight", "coordenadas", "poligono", "estado", "municipio", "localidad"]:
                 val = val.upper()
             data[k] = val
     
@@ -661,191 +848,246 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
         
         if official_val:
             ai_val = str(extracted.get(target) or "").strip()
-            # Si hay discrepancia o la IA cortó la palabra, preferimos el portal
-            if (ai_val.upper() != official_val.upper()) or (len(official_val) > len(ai_val) and len(ai_val) < 10):
+            # Criterio de grounding: reemplazar SOLO si el valor IA está vacío,
+            # es demasiado corto (<4 chars) — indicador de corte de token —,
+            # o el portal aporta información sustancialmente más larga (>5 chars más).
+            ai_is_deficient = len(ai_val) < 4
+            portal_enriches = len(official_val) > len(ai_val) + 5
+            if ai_is_deficient or portal_enriches:
                 if len(ai_val) > 3:
-                    log.debug(f"    🔗 Grounding {target}: '{ai_val}' -> '{official_val}'")
+                    log.debug(f"    Grounding {target}: '{ai_val}' -> '{official_val}'")
                 extracted[target] = official_val
     
     return extracted
 
-# Prompt Chaining - Paso 1: Ubicar contexto específico de ubicación
-LOCATION_FINDER_PROMPT = """\
-<instruction>
-Eres un perito experto en lectura de gacetas SEMARNAT. Tu objetivo es encontrar el fragmento exacto que describe la ubicación de un proyecto.
-</instruction>
+# Los prompts se cargarán dinámicamente usando PromptManager
 
-<task>
-Busca en el texto el proyecto con ID {pid}. 
-Extrae ÚNICAMENTE el fragmento de texto (oración o tabla) donde se menciona el ESTADO y el MUNICIPIO o LOCALIDAD de este proyecto específico.
-</task>
 
-<context>
-{context}
-</context>
 
-Si no encuentras el municipio pero sí el estado, copia el fragmento del estado.
-Responde SOLAMENTE con el fragmento hallado. Si no hay nada claro, responde "NO_HALLADO".
-"""
 
-# Prompt Chaining - Paso 2: Extracción estructurada avanzada (Mistral Architecture v1.0)
-EXTRACTION_PROMPT = """\
-<system_instruction>
-Eres un Investigador Senior de la SEMARNAT y Data Scientist experto en ingeniería de datos y análisis forense de documentos gubernamentales. 
-Tu tarea es extraer información prístina de texto extremadamente ruidoso (OCR degradado).
-Eres totalmente inmune a las trampas de proximidad espacial como la anomalía "EL ID" y detectas encabezados rotos como basura estructural.
-</system_instruction>
 
-<schema_definition>
-{
-  "PROMOVENTE": "Nombre legal exacto de la empresa o entidad.",
-  "PROYECTO": "Nombre oficial del proyecto.",
-  "ESTADO": "Entidad federativa (INEGI). NUNCA uses abreviaturas.",
-  "MUNICIPIO": "Nombre específico del municipio (DÉJALO VACÍO si no aparece el nombre propio).",
-  "LOCALIDAD": "Localidad o sitio específico (o vacío).",
-  "COORDENADAS": "Lat/Lon precisely si aparecen.",
-  "POLIGONO": "Vértices/Geometría si aparece.",
-  "SECTOR": "Uno de: [ENERGÍA, MINERÍA, TURISMO, INFRAESTRUCTURA, HIDROCARBUROS, AGROINDUSTRIA, OTROS].",
-  "INSIGHT": "Resumen técnico de 2-3 oraciones iniciando OBLIGATORIAMENTE con un VERBO DE ACCIÓN (Ej: Construcción, Operación, Modernización...)."
-}
-</schema_definition>
-
-<extraction_rules>
-1. EVASIÓN DEL RUIDO "EL ID": "EL ID" NO ES UN MUNICIPIO. Ignora etiquetas de encabezado.
-2. VALIDACIÓN GEOGRÁFICA: El MUNICIPIO debe existir y coincidir con el ESTADO.
-3. VERBOS DE ACCIÓN: El INSIGHT debe describir el 'qué' técnico, no solo repetir el título.
-</extraction_rules>
-
-<contrastive_examples>
-  <negative_example_anti_pattern>
-    <texto_crudo_simulado>
-    NUMERO 04 EL ID 02BC2024HD010 ESTADO QUINTANA ROO PROYECTO TREN MAYA TRAMO 5 MUNICIPIO EL ID PROMOVENTE FONATUR
-    </texto_crudo_simulado>
-    <error_analysis>
-    El modelo fallaría al extraer "EL ID" como municipio por proximidad. "EL ID" es basura de tabla.
-    </error_analysis>
-  </negative_example_anti_pattern>
-
-  <positive_example_correct_extraction>
-    <texto_crudo_simulado>
-    TRAMITE NUMERO 04 EL ID 23QR2023TD099 ESTADO QUINTANA ROO PROYECTO DESARROLLO TURISTICO ESMERALDA MUNICIPIO SOLIDARIDAD PROMOVENTE INMOBILIARIA CARIBE S.A. DE C.V. 
-    El proyecto contempla el cambio de uso de suelo para un desarrollo hotelero de 400 habitaciones en 15 hectáreas.
-    </texto_crudo_simulado>
-    <razonamiento>
-    Identifiqué "EL ID" como ruido. Ubiqué "QUINTANA ROO" como estado y validé que "SOLIDARIDAD" es un municipio válido en ese estado. El insight inicia con el verbo "Construcción".
-    </razonamiento>
-    <output_json>
-    {
-      "PROMOVENTE": "INMOBILIARIA CARIBE S.A. DE C.V.",
-      "PROYECTO": "DESARROLLO TURISTICO ESMERALDA",
-      "ESTADO": "QUINTANA ROO",
-      "MUNICIPIO": "SOLIDARIDAD",
-      "LOCALIDAD": "PLAYA DEL CARMEN",
-      "SECTOR": "TURISMO",
-      "INSIGHT": "Construcción de un desarrollo hotelero de 400 habitaciones que requiere el cambio de uso de suelo en 15 hectáreas de vegetación forestal."
+def _llm_call(messages: list, max_tokens: int, stop: list = None, log: logging.Logger = None) -> Optional[str]:
+    """
+    Llamada genérica al LLM en formato OpenAI chat/completions.
+    Compatible con DeepSeek R1 Distill y cualquier modelo llama-cpp-python.
+    """
+    payload = {
+        "model":       CONFIG["MODEL"],
+        "messages":    messages,
+        "temperature": CONFIG["TEMPERATURE"],
+        "max_tokens":  max_tokens,
     }
-    </output_json>
-  </positive_example_correct_extraction>
-</contrastive_examples>
+    if stop:
+        payload["stop"] = stop
 
-<location_context_snippet>
-{location_snippet}
-</location_context_snippet>
+    try:
+        req = urllib.request.Request(
+            CONFIG["LLAMA_URL"],
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=CONFIG["LLAMA_TIMEOUT"]) as resp:
+            return json.loads(resp.read())["choices"][0]["message"]["content"]
+    except Exception as e:
+        if log:
+            log.warning(f"    LLM call error: {e}")
+        return None
 
-<full_text_context>
-{context}
-</full_text_context>
 
-INSTRUCCIÓN FINAL:
-Genera primero un bloque <razonamiento> y luego ESTRÍCTAMENTE un bloque <output_json>.
-SI NO ENCUENTRAS EL MUNICIPIO REAL, DEJA EL CAMPO "MUNICIPIO" VACÍO ("").
-"""
+def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional[dict]:
+    """
+    Extracción ultra-rápida usando Gemini 2.0 Flash con Google Search Grounding.
+    """
+    if not gemini_client:
+        return None
 
+    try:
+        # Prompt optimizado para Esoteria Intelligence Architecture + Gemini Grounding
+        prompt = f"""
+        Act as an Esoteria Senior Intelligence Lead. Your mission is to audit and verify project {pid} 
+        using Google Search to ensure absolute grounding in reality.
 
+        CONTEXT (UNVERIFIED):
+        {context}
+        
+        GOVERNANCE PROTOCOL:
+        1. If context data is incomplete or ambiguous, use Google Search to find the ACTUAL PROMOVENTE, LOCATION, and SECTOR.
+        2. Provide a 'Structured Intelligence Brief' in the 'insight' field (2-3 sentences starting with an action verb).
+        3. Output MUST be strictly valid JSON.
+        4. GROUNDING MANDATE: Mark as grounded only if external sources verify the existence of the project.
+        
+        SCHEMA:
+        {{
+          "estado": "string",
+          "municipio": "string",
+          "localidad": "string",
+          "proyecto": "string",
+          "promovente": "string",
+          "sector": "string",
+          "insight": "string",
+          "coordenadas": "string",
+          "poligono": "string"
+        }}
+        """
+
+        google_search_tool = types.Tool(google_search=types.GoogleSearch())
+
+        response = gemini_client.models.generate_content(
+            model='gemini-flash-latest',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[google_search_tool],
+                response_mime_type="application/json"
+            )
+        )
+
+        extracted = json.loads(response.text)
+        if isinstance(extracted, list) and len(extracted) > 0:
+            extracted = extracted[0]
+        
+        if not isinstance(extracted, dict):
+            log.warning(f"    Gemini returned invalid format: {type(extracted)}")
+            return None
+
+        extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
+
+        # Capturar fuentes de Grounding
+        fuentes = []
+        if response.candidates and response.candidates[0].grounding_metadata:
+            meta = response.candidates[0].grounding_metadata
+            log.debug(f"    [Gemini-Grounding] Metadata found: {meta}")
+            
+            # Opción 1: grounding_chunks
+            if meta.grounding_chunks:
+                for chunk in meta.grounding_chunks:
+                    if chunk.web:
+                        fuentes.append(chunk.web.uri)
+            
+            # Opción 2: parsear rendered_content (HTML chips)
+            if not fuentes and hasattr(meta, 'search_entry_point') and meta.search_entry_point:
+                html = meta.search_entry_point.rendered_content
+                found = re.findall(r'href="(https://[^"]+)"', html)
+                if found:
+                    fuentes.extend(found)
+                    log.debug(f"    [Gemini-Grounding] Extracted {len(found)} URIs from HTML chips")
+            # También revisar search_entry_point si existe
+            if hasattr(meta, 'search_entry_point') and meta.search_entry_point:
+                 log.debug(f"    [Gemini-Grounding] Search entry point: {meta.search_entry_point.rendered_content}")
+        
+        if fuentes:
+            extracted["fuentes_web"] = fuentes
+            log.info(f"    ✨ Grounding exitoso: {len(fuentes)} fuentes halladas")
+
+        return extracted
+
+    except Exception as e:
+        log.warning(f"    Gemini Error: {e}")
+        return None
 
 
 def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
     """
-    Implementa Prompt Chaining para extraer datos con precisión:
-    Paso 1: Localizar el fragmento de ubicación relevante.
-    Paso 2: Realizar la extracción técnica completa usando el fragmento localizado.
+    Pipeline de extracción híbrido.
+    1. Intenta Gemini (Élite + Grounding).
+    2. Si falla, cae a Mistral Local (Prompt Chaining).
     """
-    
-    # --- PASO 1 del CHAIN: Localizar el snippet de ubicación ---
-    find_payload = json.dumps({
-        "model": CONFIG["MODEL"],
-        "messages": [{"role": "user", "content": LOCATION_FINDER_PROMPT.format(pid=pid, context=context[:2000])}],
-        "temperature": 0.0,
-        "max_tokens": 150
-    }).encode("utf-8")
-    
-    location_snippet = "No se halló snippet específico"
-    try:
-        req = urllib.request.Request(CONFIG["LLAMA_URL"], data=find_payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=CONFIG["LLAMA_TIMEOUT"]) as resp:
-            location_snippet = json.loads(resp.read())["choices"][0]["message"]["content"].strip()
-            log.debug(f"    Locality Context Signal {pid}: {location_snippet[:100]}...")
-    except Exception as e:
-        log.warning(f"    Inference Sequence Stage 1 Failure for {pid}: {e}")
 
-    # --- PASO 2 del CHAIN: Extracción Estructurada ---
-    prompt = EXTRACTION_PROMPT.format(
-        pid=pid, 
-        location_snippet=location_snippet,
-        context=context[:CONFIG["CONTEXT_CHARS"]]
-    )
+    # ── INTENTO ÉLITE: Gemini + Grounding ────────────────────────────────
+    if gemini_client:
+        extracted = extract_with_gemini(pid, context, log)
+        if extracted:
+            return extracted
+
+    # ── FALLBACK: Mistral Local (PASO 1 + PASO 2) ────────────────────────
+    log.info(f"    🔄 Falling back to Local Inference (Mistral) for {pid}")
     
-    payload = json.dumps({
-        "model":          CONFIG["MODEL"],
-        "messages":       [{"role": "user", "content": prompt}],
-        "temperature":    CONFIG["TEMPERATURE"],
-        "max_tokens":     CONFIG["MAX_TOKENS"],
-        "repeat_penalty": 1.1,
-    }).encode("utf-8")
+
+    # Cargar prompts dinámicamente
+    loc_finder_template = prompts.get_prompt("location_finder", DEFAULT_LOC_FINDER) if prompts else DEFAULT_LOC_FINDER
+    ext_template = prompts.get_prompt("extraction_v2", DEFAULT_EXTRACTION_PROMPT) if prompts else DEFAULT_EXTRACTION_PROMPT
+
+    # ── PASO 1: Location Finder ──────────────────────────────────────────
+    loc_prompt = loc_finder_template.format(pid=pid, context=context)
+    location_snippet = _llm_call(
+        messages=[{"role": "user", "content": loc_prompt}],
+        max_tokens=300,
+        log=log,
+    ) or "NO_HALLADO"
+
+    log.debug(f"    [Loc-Finder] {pid}: {location_snippet[:80]!r}")
+
+    # ── PASO 2: Extracción estructurada ──────────────────────────────────
+    ext_prompt = ext_template.format(
+        pid=pid,                      # Agregamos pid que faltaba en el .format() previo
+        location_snippet=location_snippet,
+        context=context,
+    )
 
     for attempt in range(1, CONFIG["MAX_RETRIES"] + 1):
-        try:
-            req = urllib.request.Request(
-                CONFIG["LLAMA_URL"], data=payload,
-                headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=CONFIG["LLAMA_TIMEOUT"]) as resp:
-                content = json.loads(resp.read())["choices"][0]["message"]["content"]
+        raw = _llm_call(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Act as an Esoteria Senior Intelligence Lead. Your mission is to convert "
+                        "fragmented gubernamental data into governed, grounded intelligence. "
+                        "Responde SIEMPRE con un bloque <razonamiento> seguido de <output_json>."
+                    ),
+                },
+                {"role": "user", "content": ext_prompt},
+            ],
+            max_tokens=CONFIG["MAX_TOKENS"],
+            stop=["</output_json>"],
+            log=log,
+        )
 
-            # Loguear razonamiento
-            razonamiento = re.search(r'<(think|razonamiento)>(.*?)</\1>', content, re.DOTALL | re.IGNORECASE)
-            if razonamiento:
-                thought = razonamiento.group(2).strip()
-                log.debug(f"    Heuristic Rationale {pid}: {thought[:200]}...")
-                report_state(pdf_name, "IA_THINKING", f"[{pid}] {thought[:180]}...")
+        if not raw:
+            log.warning(f"    Inference anomaly (attempt {attempt})")
+            time.sleep(3 * attempt)
+            continue
 
-            json_match = re.search(r'<output_json>(.*?)</output_json>', content, re.DOTALL)
-            if not json_match:
-                json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
-            
-            if json_match:
-                json_str = json_match.group(1) if '<output_json>' in content else json_match.group(0)
-                extracted = json.loads(json_str)
+        # ── ROBUST OUTPUT AUDITOR (Cap. 9 & 18) ───────────────────────────
+        # Extraer JSON buscando la estructura de llaves, manejando basura tipográfica
+        json_match = None
+        
+        # Estrategia A: Etiqueta formal
+        m = re.search(r'<output_json>\s*(.*?)\s*(?:</output_json>|$)', raw, re.DOTALL)
+        if m:
+            json_match = m.group(1).strip()
+        
+        # Estrategia B: Búsqueda heurística de { ... }
+        if not json_match or "{" not in json_match:
+            m = re.search(r'\{[\s\S]*?\}', raw)
+            if m:
+                json_match = m.group(0).strip()
+        
+        if json_match:
+            # Limpieza profunda de ruido tabular inyectado en el JSON
+            # Quitar bloques de código MD
+            json_match = re.sub(r'```json\s*', '', json_match)
+            json_match = re.sub(r'```', '', json_match)
+            # Quitar posibles razonamientos que se filtraron
+            json_match = re.sub(r'<razonamiento>.*?</razonamiento>', '', json_match, flags=re.DOTALL)
+            # Reparar comas finales erróneas
+            json_match = re.sub(r',\s*\}', '}', json_match)
+            json_match = re.sub(r',\s*\]', ']', json_match)
+            # Quitar placeholders literales que el modelo aún inyecta a veces
+            for p_term in PLACEHOLDER_TERMS:
+                if p_term and len(p_term) > 3:
+                     json_match = re.sub(f'(?i)"{re.escape(p_term)}"', '""', json_match)
+
+            try:
+                extracted = json.loads(json_match)
+                # Normalizar keys a minúsculas para consistencia interna
                 extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
-                
-                # Normalización de Sectores
-                sector = extracted.get("sector", "OTROS").upper()
-                if any(x in sector for x in ["SOLAR", "EOLICA", "ELECTRIC", "LINEA", "ENERGIA"]):
-                    extracted["sector"] = "ENERGÍA"
-                
-                log.debug(f"    AI ({attempt}): {extracted}")
                 return extracted
-            else:
-                log.warning(f"    Non-structured response detected ({attempt}/{CONFIG['MAX_RETRIES']})")
-                return {
-                    "proyecto": "EXTRACCIÓN AUTOMÁTICA", "promovente": "DESCONOCIDO",
-                    "estado": "", "municipio": "", "riesgo": "bajo",
-                    "descripcion": "AI falló en estructurar JSON"
-                }
+            except json.JSONDecodeError as e:
+                log.debug(f"    JSON Auditor Alert (attempt {attempt}): {e} — snippet: {json_match[:100]!r}")
+                time.sleep(2)
+                continue
 
-        except Exception as e:
-            log.warning(f"    Neural extraction anomaly ({attempt}): {e}")
-            if attempt < CONFIG["MAX_RETRIES"]:
-                time.sleep(CONFIG["RETRY_BASE_WAIT"])
+        log.debug(f"    No JSON block found in response (attempt {attempt})")
+        time.sleep(2)
 
     return None
 
@@ -859,13 +1101,19 @@ def write_to_csv(year: int, pid: str, d: dict):
     if pid_in_csv(pid):
         return
     def clean(v): return re.sub(r'[,\n\r]', ' ', str(d.get(v, ""))).strip()
-    # Nueva estructura: AÑO, ID, ESTADO, MUNICIPIO, LOCALIDAD, PROYECTO, PROMOVENTE, SECTOR, INSIGHT, COORDENADAS, POLIGONO
+    
+    # Manejar fuentes_web si existen (de Gemini Grounding)
+    fuentes = d.get("fuentes_web", [])
+    fuentes_str = " | ".join(fuentes) if isinstance(fuentes, list) else str(fuentes)
+
+    # Nueva estructura: AÑO, ID, ESTADO, MUNICIPIO, LOCALIDAD, PROYECTO, PROMOVENTE, SECTOR, INSIGHT, COORDENADAS, POLIGONO, FUENTES
     row = [str(year), pid,
            clean("estado"), clean("municipio"), clean("localidad"),
            clean("proyecto"), clean("promovente"),
            clean("sector") or "OTROS",
            clean("insight"),
-           clean("coordenadas"), clean("poligono")]
+           clean("coordenadas"), clean("poligono"),
+           fuentes_str]
     with open(CONFIG["CSV_FILE"], "a", newline="", encoding="utf-8") as f:
         csv.writer(f).writerow(row)
 
@@ -900,6 +1148,7 @@ def write_to_supabase(year: int, pid: str, d: dict, log: logging.Logger):
             "insight": d.get("insight", ""),
             "coordenadas": d.get("coordenadas") or d.get("coordinates", ""),
             "poligono": d.get("poligono") or d.get("polygon", ""),
+            "fuentes_web": d.get("fuentes_web", []),
             "updated_at": datetime.datetime.now().isoformat()
         }
         
@@ -970,6 +1219,11 @@ def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger)
         
         log.info(f"  👁️  Activando OCR Vision (Qwen2-VL) para {pid}...")
         
+        # Guard para dependencias de vision
+        if 'convert_from_path' not in globals():
+            log.warning("  ⚠️ OCR Vision abortado: pdf2image/poppler no disponible en este entorno")
+            return None
+
         # Convertir las primeras páginas (donde suelen estar las tablas)
         # Ajustamos DPI a 150 para balancear calidad y velocidad en el AMD A8
         images = convert_from_path(str(pdf_path), first_page=1, last_page=3, dpi=150)
@@ -987,7 +1241,7 @@ def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger)
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": f"Extract project info for ID {pid} from this SEMARNAT Gaceta image. Return JSON with PROMOVENTE, PROYECTO, ESTADO, MUNICIPIO, RIESGO, DESCRIPCION."},
+                            {"type": "text", "text": f"Act as an Esoteria Forensic Vision Auditor. Analyze this image of the SEMARNAT Gazette and extract intelligence for project {pid}. Output ONLY a single valid JSON object. ENFORCED CONSTRAINT: All values MUST be double-quoted strings. If a value is unknown, use an empty string. KEYS: PROMOVENTE, PROYECTO, ESTADO, MUNICIPIO, RIESGO, DESCRIPCION. No markdown, no explanations."},
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
                         ]
                     }
@@ -998,130 +1252,371 @@ def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger)
             req = urllib.request.Request(CONFIG["OCR_URL"], data=json.dumps(payload).encode(),
                                          headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=180) as r:
-                res = json.loads(r.read())
+                raw_response = r.read()
+                try:
+                    res = json.loads(raw_response)
+                except json.JSONDecodeError as e:
+                    log.error(f"  ❌ OCR API JSON Error: {e}")
+                    log.debug(f"  Raw API response: {raw_response[:500]!r}")
+                    return None
+
                 content = res["choices"][0]["message"]["content"]
                 
-                # Extraer JSON
-                m = re.search(r"\{.*\}", content, re.DOTALL)
+                # Extraer JSON con regex robusta
+                m = re.search(r"(\{[\s\S]*\})", content)
                 if m:
-                    extracted = json.loads(m.group(0))
-                    # Normalizar
-                    extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
-                    if extracted.get("promovente") and extracted.get("promovente").lower() not in ("desconocido", "none", "null", ""):
-                        log.info(f"  ✨ Vision OCR exitoso para {pid}")
-                        return extracted
+                    json_str = m.group(1).strip()
+                    # Limpieza agresiva de caracteres comunes mal formados por modelos de visión
+                    # 1. Eliminar bloques de código markdown si el regex falló en quitarlos
+                    json_str = re.sub(r'```json\s*', '', json_str)
+                    json_str = re.sub(r'```', '', json_str)
+                    # 2. Eliminar comentarios estilo // o #
+                    json_str = re.sub(r'//.*', '', json_str)
+                    # 3. Intentar corregir valores no entrecomillados (ej: "ID": 10ABC)
+                    # Buscamos cualquier cosa después de : que no empiece con " y lo envolvemos en comillas
+                    json_str = re.sub(r':\s*(?![{\["\s])(.*?)\s*(?=[\n\r,\]\}])', r': "\1"', json_str)
+                    # 4. Reemplazar comas finales antes de cerrar llave/corchete
+                    json_str = re.sub(r',\s*\}', '}', json_str)
+                    json_str = re.sub(r',\s*\]', ']', json_str)
+                    
+                    try:
+                        extracted = json.loads(json_str)
+                        # Normalizar
+                        extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
+                        # Validar si tenemos algo útil
+                        p = extracted.get("promovente", "").lower()
+                        if p and p not in ("desconocido", "none", "null", ""):
+                            log.info(f"  ✨ Vision OCR exitoso para {pid}")
+                            return extracted
+                    except json.JSONDecodeError as e:
+                        log.error(f"  ❌ Error parseando JSON de Vision: {e}")
+                        log.debug(f"  Cleaned JSON that failed: {json_str!r}")
+                        log.debug(f"  Raw content from model: {content!r}")
         return None
     except Exception as e:
-        log.error(f"  ❌ Error en Vision OCR: {e}")
+        log.error(f"  ❌ Error crítico en Vision OCR: {e}")
         return None
 
 
 # ─────────────────────────────────────────────────────────
-# LOOP DE EXTRACCIÓN (procesa la queue pendiente)
+# VALIDACIÓN DE CALIDAD — Scoring por campos
 # ─────────────────────────────────────────────────────────
+
+# Campos obligatorios con su peso relativo (suma = 100)
+FIELD_WEIGHTS = {
+    "promovente": 35,  # Sin promovente no hay registro útil
+    "proyecto":   20,
+    "estado":     20,  # Derivado del PID (casi siempre OK)
+    "municipio":  10,
+    "insight":    10,
+    "sector":      5,
+}
+
+PLACEHOLDER_TERMS = {
+    "desconocido", "null", "none", "n/a", "na", "", "proyecto en evaluación",
+    "extracción automática", "migrado", "...", "sin detalles",
+    "project name", "project description", "municipality", "id_proyecto", "el id", 
+    "nombre específico", "nombre legal", "generic name", "placeholder", "undefined",
+    "nombre del proyecto", "nombre del promovente", "entidad federativa",
+    "busque el nombre", "error de extracción", "sin información"
+}
+
+
+def score_record(d: dict) -> tuple[int, list[str]]:
+    """
+    Calcula un score 0-100 para un registro extraído.
+    Retorna (score, lista_de_campos_deficientes).
+    Un score ≥ 60 es suficiente para persistir.
+    Un score ≥ 80 es de alta confianza.
+    """
+    score = 0
+    deficient = []
+
+    for field, weight in FIELD_WEIGHTS.items():
+        val = str(d.get(field, "")).strip().lower()
+        if val and val not in PLACEHOLDER_TERMS and len(val) > 2:
+            score += weight
+        else:
+            deficient.append(field)
+
+    # Bonus: insight largo y específico
+    insight = str(d.get("insight", "")).strip()
+    if len(insight) > 80:
+        score = min(100, score + 5)
+
+    # Bonus: coordenadas o polígono presentes
+    if d.get("coordenadas") or d.get("poligono"):
+        score = min(100, score + 5)
+
+    return score, deficient
+
+
+def _repair_missing_fields(pid: str, context: str, d: dict,
+                            deficient: list[str], log: logging.Logger) -> dict:
+    """
+    Intento quirúrgico de reparar campos deficientes con un prompt focalizado.
+    Sólo se llama cuando el score no alcanza el umbral tras la primera extracción.
+    Evita volver a llamar al LLM si los campos críticos ya están bien.
+    """
+    # No reparar si los únicos campos faltantes son menores
+    critical_missing = [f for f in deficient if f in ("promovente", "proyecto", "estado")]
+    if not critical_missing:
+        log.debug(f"    [Repair] Solo campos secundarios deficientes — omitiendo re-llamada")
+        return d
+
+    repair_prompt = f"""Eres un extractor forense de documentos SEMARNAT.
+Del siguiente texto, extrae SÓLO los campos faltantes para el proyecto {pid}.
+
+Campos que NECESITO (sólo estos, en JSON plano):
+{json.dumps({f: "" for f in critical_missing}, ensure_ascii=False)}
+
+Texto:
+{context[:2000]}
+
+Responde ÚNICAMENTE con un objeto JSON con esos campos. Si no encuentras el valor, deja la cadena vacía."""
+
+    raw = _llm_call(
+        messages=[{"role": "user", "content": repair_prompt}],
+        max_tokens=400,
+        log=log,
+    )
+    if not raw:
+        return d
+
+    m = re.search(r'\{[\s\S]*?\}', raw)
+    if m:
+        try:
+            patch = json.loads(m.group(0))
+            patch = {k.lower().strip(): str(v).strip() for k, v in patch.items()}
+            # Sólo parchar si el valor del patch es mejor
+            for field in critical_missing:
+                patch_val = patch.get(field, "").strip().lower()
+                if patch_val and patch_val not in PLACEHOLDER_TERMS and len(patch_val) > 2:
+                    d[field] = patch[field]
+                    log.debug(f"    [Repair] {field} → '{patch[field][:60]}'")
+        except json.JSONDecodeError:
+            pass
+    return d
+
+
+def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
+                           context: str, queue: PersistentQueue,
+                           log: logging.Logger) -> bool:
+    """
+    Gate de validación final antes de persistir.
+
+    Flujo:
+      1. Normalizar campos
+      2. Calcular score
+      3. Si score < 60: intentar reparación quirúrgica una vez
+      4. Re-normalizar tras reparación
+      5. Re-calcular score final
+      6. Tomar decisión: persistir | reintentar | rechazar
+
+    Retorna True si el registro fue persistido correctamente.
+    """
+    SCORE_ACCEPT   = 70   # Umbral mínimo para persistir
+    SCORE_HIGH_Q   = 80   # Umbral de alta confianza (log diferenciado)
+
+    # ── Paso 1: Normalización inicial ────────────────────────────────────
+    d = normalize_extracted_data(pid, d)
+    score, deficient = score_record(d)
+
+    log.debug(f"    [Gate-1] {pid} score={score} deficient={deficient}")
+
+    # ── Paso 2: Grounding con portal antes de reparar ────────────────────
+    portal_data = fetch_portal_docs(pid, log)
+    if portal_data:
+        d = ground_data(d, portal_data, log)
+        d = normalize_extracted_data(pid, d)
+        score, deficient = score_record(d)
+        log.debug(f"    [Gate-2 post-grounding] {pid} score={score}")
+
+    # ── Paso 3: Reparación quirúrgica si score insuficiente ──────────────
+    if score < SCORE_ACCEPT and deficient:
+        log.info(f"    [Repair] {pid} score={score} — reparando: {deficient}")
+        d = _repair_missing_fields(pid, context, d, deficient, log)
+        d = normalize_extracted_data(pid, d)
+        score, deficient = score_record(d)
+        log.debug(f"    [Gate-3 post-repair] {pid} score={score}")
+
+    # ── Paso 4: Decisión final ───────────────────────────────────────────
+    if score < SCORE_ACCEPT:
+        log.warning(f"    [REJECT] {pid} score={score} < {SCORE_ACCEPT} — deficiente: {deficient}")
+        queue.mark_attempt(pid, error=f"quality_score={score} deficient={deficient}")
+        return False
+
+    # ── Paso 5: Persistencia ─────────────────────────────────────────────
+    if not CONFIG["DRY_RUN"]:
+        # Persistencia local Gold Standard (SQLite)
+        if memory:
+            memory.store_project(pid, year, d)
+            
+        write_to_csv(year, pid, d)
+        write_to_graph(pid, d)
+        write_to_supabase(year, pid, d, log)
+        if portal_data:
+            _process_portal_docs(pid, portal_data, log)
+
+    queue.mark_success(pid)
+
+    quality_tag = "HIGH-Q" if score >= SCORE_HIGH_Q else "OK"
+    st = queue.stats()
+    log_extra(
+        log, logging.INFO,
+        f"  [{quality_tag}] {pid} score={score} → {str(d.get('promovente',''))[:50]}"
+        f"  [OK:{st['success']} P:{st['pending']} F:{st['failed']}]",
+        pid=pid, score=score, promovente=d.get("promovente", ""),
+    )
+    return True
+
+
+# ─────────────────────────────────────────────────────────
+# LOOP DE EXTRACCIÓN — Micro-bloques con validación previa
+# ─────────────────────────────────────────────────────────
+BATCH_SIZE = 5   # Procesar en micro-lotes para monitoreo granular
+
+
+def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], str]:
+    """
+    Extrae datos para un único QueueItem.
+    Retorna (dict_extraído_o_None, contexto_usado).
+
+    Compuertas previas a la llamada LLM:
+      • El archivo TXT existe y tiene contenido real
+      • El ID del proyecto está realmente en el texto
+      • El contexto extraído tiene densidad semántica suficiente
+    """
+    txt_path = Path(item.txt_file)
+    
+    # ── COMPUERTA DE MEMORIA (Cap. 16) ───────────────────────────
+    if memory and memory.project_exists(item.pid):
+        log.info(f"    [Memory] {item.pid} found in local intelligence — skipping")
+        queue.mark_success(item.pid)
+        return None, "SKIPPED_BY_MEMORY"
+
+    # Gate A: archivo existe
+    if not txt_path.exists():
+        return None, ""
+
+    txt = txt_path.read_text(errors="replace")
+
+    # Gate B: ID presente en texto
+    idx = txt.find(item.pid)
+    if idx == -1:
+        return None, ""
+
+    # Gate C: ventana de contexto con contenido útil
+    half = CONFIG["CONTEXT_CHARS"] // 2
+    raw_ctx = txt[max(0, idx - half): idx + half]
+    context = re.sub(r'\s+', ' ', raw_ctx).strip()
+
+    # Verificación de densidad: si hay menos de 50 chars únicas, el PDF era basura
+    unique_chars = len(set(context.replace(" ", "")))
+    if unique_chars < 50:
+        log.warning(f"    [Gate-C] Contexto pobre para {item.pid} ({unique_chars} chars únicos) — intentando OCR")
+        vision = extract_with_vision(item.pid, item.year, item.pdf, log)
+        return vision, context
+
+    # Extracción principal con IA
+    extracted = extract_with_ai(item.pid, context, log)
+
+    # Fallback Vision OCR si el promovente no es convincente
+    if not extracted or str(extracted.get("promovente", "")).strip().lower() in PLACEHOLDER_TERMS:
+        log.info(f"    [Fallback-Vision] {item.pid}")
+        vision = extract_with_vision(item.pid, item.year, item.pdf, log)
+        if vision:
+            extracted = vision
+
+    return extracted, context
+
+
 def run_extraction(queue: PersistentQueue, log: logging.Logger):
+    """
+    Orquestador de extracción en micro-lotes con validación en cascada.
+
+    Flujo por ítem:
+      1. _extract_single()     → Compuertas de contexto + LLM + Vision fallback
+      2. _validate_and_persist() → Normalizar → Score → Grounding → Reparar → Persistir
+      3. thermal_wait()        → Control térmico entre inferencias
+
+    El procesamiento por micro-lotes (BATCH_SIZE) permite:
+      • Reportar progreso intermedio
+      • Recargar la cola desde disco (detecta items añadidos por otros procesos)
+      • Salir limpiamente ante señales de apagado
+    """
     pending = queue.pending()
     if not pending:
-        log.info("📋 Queue vacía")
+        log.info("Queue vacía — sin trabajo pendiente")
         return
 
-    log.info(f"Executing high-throughput extraction on {len(pending)} operational identifiers...")
+    total = len(pending)
+    log.info(f"[Extraction] {total} identifiers — batch_size={BATCH_SIZE}")
 
-    for item in pending:
+    processed = 0
+
+    # Iteración en micro-lotes
+    for batch_start in range(0, total, BATCH_SIZE):
         if _shutdown:
             break
 
+        # Verificar LLM una vez por lote (no por ítem)
         if not wait_for_llama(log, max_wait=60):
-            log.error("Critical: LLM endpoint unreachable - cycle aborted")
+            log.error("[Pipeline] LLM endpoint unreachable — cycle aborted")
             break
 
-        txt_path = Path(item.txt_file)
-        if not txt_path.exists():
-            queue.mark_attempt(item.pid, error="txt_missing")
-            continue
+        batch = pending[batch_start: batch_start + BATCH_SIZE]
+        log.info(f"[Batch {batch_start // BATCH_SIZE + 1}] "
+                 f"Items {batch_start + 1}–{batch_start + len(batch)} / {total}")
 
-        txt = txt_path.read_text(errors="replace")
+        for item in batch:
+            if _shutdown:
+                break
 
-        # Ventana de contexto centrada en el ID
-        idx = txt.find(item.pid)
-        if idx == -1:
-            queue.mark_attempt(item.pid, error="id_not_in_txt")
-            continue
+            report_state(item.pdf, "EXTRACTING", item.pid)
+            log.info(f"  [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid}")
 
-        half = CONFIG["CONTEXT_CHARS"] // 2
-        context = txt[max(0, idx - half): idx + half]
-        context = re.sub(r'\s+', ' ', context).strip()
+            # ── Extracción con compuertas de contexto ─────────────────────
+            extracted, context = _extract_single(item, log)
 
-        report_state(item.pdf, "IA_EXTRACTING", item.pid)
-        log.info(f"  Processor Task [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid}")
+            if extracted is None:
+                # Determinar razón exacta del fallo
+                txt_path = Path(item.txt_file)
+                if not txt_path.exists():
+                    err = "txt_missing"
+                elif item.pid not in txt_path.read_text(errors="replace"):
+                    err = "id_not_in_txt"
+                else:
+                    err = "extraction_failed"
+                log.warning(f"    [Skip] {item.pid}: {err}")
+                queue.mark_attempt(item.pid, error=err)
+                thermal_wait(log)
+                continue
 
-        extracted = extract_with_ai(item.pid, context, log)
+            # ── Validación, grounding y persistencia ─────────────────────
+            _validate_and_persist(
+                pid=item.pid, year=item.year, pdf=item.pdf,
+                d=extracted, context=context,
+                queue=queue, log=log,
+            )
 
-        # DIGITAL TWIN GROUNDING: Consultar el portal antes de decidir calidad
-        portal_data = fetch_portal_docs(item.pid, log)
+            processed += 1
+            thermal_wait(log)
 
-        # Fallback a Vision OCR si la IA de texto no fue convincente
-        if not extracted or (extracted.get("promovente") or "").lower() in ("desconocido", "none", "", "null"):
-            vision_extracted = extract_with_vision(item.pid, item.year, item.pdf, log)
-            if vision_extracted:
-                extracted = vision_extracted
+        # ── Resumen de lote ───────────────────────────────────────────────
+        st = queue.stats()
+        log.info(
+            f"[Batch done] OK:{st['success']} Pending:{st['pending']} "
+            f"Failed:{st['failed']} | Processed this run: {processed}/{total}"
+        )
 
-        if extracted:
-            # 1. Normalizar estructura técnica
-            extracted = normalize_extracted_data(item.pid, extracted)
-            
-            # 2. Aterrizar con datos oficiales (Estrategia 1: Grounding)
-            if portal_data:
-                extracted = ground_data(extracted, portal_data, log)
-                # Volver a normalizar por si el portal trajo nombres en minúscula
-                extracted = normalize_extracted_data(item.pid, extracted)
-
-            promovente = extracted.get("promovente", "").strip()
-            
-            # La descripción ya viene normalizada de normalize_extracted_data
-
-            if promovente and promovente.lower() not in ("", "null", "n/a", "desconocido"):
-                if not CONFIG["DRY_RUN"]:
-                    write_to_csv(item.year, item.pid, extracted)
-                    write_to_graph(item.pid, extracted)
-                    write_to_supabase(item.year, item.pid, extracted, log)
-                    # Intentar descargar documentos del portal
-                    portal_data = fetch_portal_docs(item.pid, log)
-                    if portal_data:
-                        _process_portal_docs(item.pid, portal_data, log)
-
-                queue.mark_success(item.pid)
-                st = queue.stats()
-                log_extra(log, logging.INFO,
-                          f"  ✅ {item.pid} → {promovente[:50]}  "
-                          f"[OK:{st['success']} P:{st['pending']} F:{st['failed']}]",
-                          pid=item.pid, promovente=promovente)
-            else:
-                queue.mark_attempt(item.pid, error="empty_promovente")
-                log.warning(f"  ⚠️ Promovente vacío para {item.pid}")
-        else:
-            # Fallback a metadatos del portal si la IA falla completamente
-            portal_data = fetch_portal_docs(item.pid, log)
-            fallback = {
-                "proyecto": portal_data.get("titulo") or portal_data.get("proyecto") or "MIA PARTICULAR (Metadata)",
-                "promovente": portal_data.get("promovente", "DESCONOCIDO"),
-                "estado": portal_data.get("estado", ""),
-                "municipio": portal_data.get("municipio", ""),
-                "riesgo": "bajo",
-                "descripcion": "Extracción automática (AI falló)"
-            }
-            fallback = normalize_extracted_data(item.pid, fallback)
-            if not CONFIG["DRY_RUN"]:
-                write_to_csv(item.year, item.pid, fallback)
-                write_to_supabase(item.year, item.pid, fallback, log)
-            queue.mark_success(item.pid)
-            log.warning(f"  ⚠️ Fallback usado para {item.pid}")
-
-        thermal_wait(log)
-
+    # ── Resumen global del ciclo ──────────────────────────────────────────
     st = queue.stats()
     report_state("IDLE", "STANDBY", "NONE")
-    log.info(f"✅ Ciclo OK — Total:{st['total']} OK:{st['success']} Pend:{st['pending']} Fail:{st['failed']}")
+    log.info(
+        f"[Extraction complete] Total:{st['total']} "
+        f"OK:{st['success']} Pending:{st['pending']} Failed:{st['failed']}"
+    )
 
 
 def _process_portal_docs(pid: str, portal_data: dict, log: logging.Logger):
@@ -1191,8 +1686,13 @@ def main():
     log   = setup_logging(CONFIG["LOG_FILE"])
     queue = PersistentQueue(CONFIG["QUEUE_FILE"])
     seen  = SeenGacetas(CONFIG["SEEN_FILE"])
-
-    log.info("══ ZOHAR AGENT V2.2 START ══")
+    
+    # Inicializar Memoria y Prompts
+    global memory, prompts
+    memory  = LocalIntelligenceMemory(CONFIG["DB_FILE"])
+    prompts = PromptManager(CONFIG["PROMPTS_DIR"])
+    
+    log.info(f"🚀 ZOHAR AGENT v2.2 ACTIVO | Memoria: {memory.get_stats()}")
     log.info(f"  ZOHAR AGENT v2.2  |  Años: {target_years[0]}...{target_years[-1]}  |  DRY_RUN:{CONFIG['DRY_RUN']}")
     st = queue.stats()
     log.info(f"  Queue: {st}")

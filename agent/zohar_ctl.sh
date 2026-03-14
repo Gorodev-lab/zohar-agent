@@ -14,6 +14,7 @@ QUEUE_FILE="$BASE_DIR/agent/zohar_queue.json"
 SEEN_FILE="$BASE_DIR/agent/zohar_seen_gacetas.json"
 PID_FILE="/tmp/zohar_agent_v2.pid"
 VENV="$BASE_DIR/zohar_venv"
+SENTINEL="$BASE_DIR/agent/zohar_sentinel.py"
 
 CMD=${1:-status}
 
@@ -40,13 +41,18 @@ case "$CMD" in
     # Modo daemon: monitorea indefinidamente cada N minutos
     _is_running && echo "⚠️  El agente ya está corriendo (PID $(cat $PID_FILE))" && exit 1
     _activate
-    echo "🚀 Iniciando Zohar Agent v2.1 (modo daemon)..."
-    # Activar DAEMON_MODE antes de lanzar
-    nohup python3 -c "
-import zohar_agent_v2 as z
-z.CONFIG['DAEMON_MODE'] = True
-z.main()
-" >> "$LOG_FILE" 2>&1 &
+    
+    echo "🔴 Ejecutando limpieza RED..."
+    python3 "$SENTINEL" --cleanup
+    
+    echo "🟢 Validando salud GREEN..."
+    if ! python3 "$SENTINEL"; then
+        echo "❌ Fallo crítico de salud LLM. Abortando arranque."
+        exit 1
+    fi
+
+    echo "🚀 Iniciando Zohar Agent v2.2 (modo daemon)..."
+    nohup python3 "$AGENT_SCRIPT" --daemon >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     echo "✅ Daemon PID $! — polling cada ${POLL_INTERVAL_MIN:-30} min"
     echo "   Monitor: ./zohar_ctl.sh inspect"
@@ -57,11 +63,7 @@ z.main()
     _is_running && echo "⚠️  Detén el agente antes: ./zohar_ctl.sh stop" && exit 1
     _activate
     echo "🧪 DRY RUN — no se escribirá al CSV ni al grafo"
-    python3 -c "
-import zohar_agent_v2 as z
-z.CONFIG['DRY_RUN'] = True
-z.main()
-"
+    python3 "$AGENT_SCRIPT" --dry-run
     ;;
 
   sweep)

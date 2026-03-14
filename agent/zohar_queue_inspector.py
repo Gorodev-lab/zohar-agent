@@ -11,9 +11,11 @@ import time
 from pathlib import Path
 from datetime import datetime
 
-QUEUE_FILE = Path.home() / "zohar-agent" / "agent" / "zohar_queue.json"
-LOG_FILE   = Path.home() / "zohar-agent" / "agent" / "zohar_agent.jsonl"
-STATE_FILE = Path.home() / "zohar_agent_state.json"
+# Configuración de Rutas Reales (Zohar SRE Production)
+BASE_PROJECT = Path("/home/gorops/proyectos antigravity/zohar-agent")
+QUEUE_FILE   = BASE_PROJECT / "agent" / "zohar_queue.json"
+LOG_FILE     = BASE_PROJECT / "agent" / "zohar_agent.jsonl"
+STATE_FILE   = Path.home() / "zohar_agent_state.json"
 
 COLORS = {
     "success": "\033[92m",  # verde
