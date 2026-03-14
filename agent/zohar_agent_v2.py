@@ -1105,35 +1105,36 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
 # Prompt Maestro optimizado bajo el estándar UDP (Universal Developer Prompt) del Codex Gemini 3
 DEFAULT_EXTRACTION_PROMPT = """
 <role_persona>
-Act as an Esoteria Principal Intelligence Lead specialized in Mexican environmental forensics.
-Your mission is to structure chaotic, noisy data from official gazettes into high-fidelity intelligence.
+Actúa como un Líder Principal de Inteligencia de Esoteria especializado en forense ambiental mexicano.
+Tu misión es estructurar datos caóticos y ruidosos de gacetas oficiales en inteligencia de alta fidelidad.
 </role_persona>
 
 <context>
-PROJECT_ID: {pid}
-LOCATION_STUB: {location_snippet}
-RAW_TEXT_FROM_PDF:
+ID_PROYECTO: {pid}
+FRAGMENTO_UBICACION: {location_snippet}
+TEXTO_BRUTO_PDF:
 {context}
 </context>
 
 <constraints>
-1. NEVER hallucinate geographic entities. Use INEGI standards.
-2. If 'EL ID' or 'ID_PROYECTO' appear near locations, they are metadata noise. REJECT THEM.
-3. The 'INSIGHT' field MUST start with an action verb (Construcción, Operación, etc.) and specify 2-3 technical parameters.
-4. If context is insufficient, mark 'grounded': false.
+1. NUNCA alucines entidades geográficas. Usa estándares de INEGI.
+2. Si 'EL ID' o 'ID_PROYECTO' aparecen cerca de locaciones, son ruido de metadatos. RECHÁZALOS.
+3. El campo 'INSIGHT' DEBE comenzar con un verbo de acción (Construcción, Operación, etc.) y especificar 2-3 parámetros técnicos.
+4. Si el contexto es insuficiente, marca 'grounded': false.
+5. TODA LA SALIDA (razonamiento e insight) DEBE ESTAR EN ESPAÑOL.
 </constraints>
 
 <task_goal>
-Perform a forensic extraction of the project details.
-Follow the Step-by-Step reasoning before outputting the final JSON.
+Realiza una extracción forense de los detalles del proyecto.
+Sigue el razonamiento paso a paso antes de generar el JSON final.
 </task_goal>
 
 <output_format>
-Format your response exactly as:
+Formatea tu respuesta exactamente como:
 <razonamiento>
-[Step 1: Noise identification]
-[Step 2: Geo-validation with INEGI]
-[Step 3: Synthesis of technical parameters]
+[Paso 1: Identificación de ruido]
+[Paso 2: Geo-validación con INEGI]
+[Paso 3: Síntesis de parámetros técnicos]
 </razonamiento>
 
 <output_json>
@@ -1421,7 +1422,7 @@ def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger)
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": f"Act as an Esoteria Forensic Vision Auditor. Analyze this image of the SEMARNAT Gazette and extract intelligence for project {pid}. Output ONLY a single valid JSON object. ENFORCED CONSTRAINT: All values MUST be double-quoted strings. If a value is unknown, use an empty string. KEYS: PROMOVENTE, PROYECTO, ESTADO, MUNICIPIO, RIESGO, DESCRIPCION. No markdown, no explanations."},
+                            {"type": "text", "text": f"Actúa como un Auditor de Visión Forense de Esoteria. Analiza esta imagen de la Gaceta SEMARNAT y extrae inteligencia para el proyecto {pid}. Genera ÚNICAMENTE un objeto JSON válido. RESTRICCIÓN: Todos los valores deben ser cadenas entre comillas dobles. Si un valor es desconocido, usa una cadena vacía. LLAVES: PROMOVENTE, PROYECTO, ESTADO, MUNICIPIO, RIESGO, DESCRIPCION. Sin markdown, sin explicaciones. TODO EN ESPAÑOL."},
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
                         ]
                     }
@@ -1499,7 +1500,7 @@ PLACEHOLDER_TERMS = {
     "sistema de gestión", "proyecto de inversión", "información del proyecto",
     "estudio de impacto", "estudio de sustentabilidad", "extracción automática",
     "proyecto en evaluación", "bitácora del trámite", "consulta de trámites",
-    "gaceta ecológica", r"semarnat gazette", r"gaceta semarnat", r"gazette semarnat", "listado de proyectos", "resumen del proyecto",
+    "gaceta ecológica", r"semarnat gazette", r"gaceta semarnat", r"gazette semarnat", "gaseleta", "gaseteta", "gazeleta", "listado de proyectos", "resumen del proyecto",
     # Instrucciones o nombres de campos (Alucinaciones de prompt)
     "id_proyecto", "el id", "nombre del proyecto", "nombre del promovente",
     "entidad federativa", "busque el nombre", "error de extracción", "sin información",
