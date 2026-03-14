@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://short-terms-invent.loca.lt/api/:path*"
+      "destination": "https://great-otters-join.loca.lt/api/:path*"
     }
   ]
 }
