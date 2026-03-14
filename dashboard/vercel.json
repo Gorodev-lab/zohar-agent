@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://kind-pillows-sink.loca.lt/api/:path*"
+      "destination": "https://cold-lizards-dress.loca.lt/api/:path*"
     }
   ]
 }
