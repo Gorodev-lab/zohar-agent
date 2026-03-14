@@ -835,12 +835,13 @@ function dashboard() {
         async fetchData() {
             try {
                 const b = window.location.origin;
+                const h = { 'bypass-tunnel-reminder': 'true' };
                 const [s, a, p, an, l] = await Promise.all([
-                    fetch(`${b}/api/status`).then(r => r.json()),
-                    fetch(`${b}/api/agent_state`).then(r => r.json()),
-                    fetch(`${b}/api/projects`).then(r => r.json()),
-                    fetch(`${b}/api/analytics`).then(r => r.json()),
-                    fetch(`${b}/api/logs`).then(r => r.json()),
+                    fetch(`${b}/api/status`, { headers: h }).then(r => r.json()),
+                    fetch(`${b}/api/agent_state`, { headers: h }).then(r => r.json()),
+                    fetch(`${b}/api/projects`, { headers: h }).then(r => r.json()),
+                    fetch(`${b}/api/analytics`, { headers: h }).then(r => r.json()),
+                    fetch(`${b}/api/logs`, { headers: h }).then(r => r.json()),
                 ]);
                 this.status    = s;
                 this.agent     = a;
@@ -858,7 +859,7 @@ function dashboard() {
         async fetchDiag() {
             try {
                 const b = window.location.origin;
-                const d = await fetch(`${b}/api/diagnostics`).then(r => r.json());
+                const d = await fetch(`${b}/api/diagnostics`, { headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
                 this.diag = d;
             } catch(e) { console.warn('fetchDiag:', e.message); }
         },
