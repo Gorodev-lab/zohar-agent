@@ -846,13 +846,18 @@ function dashboard() {
             };
 
             try {
-                const [s, a, p, an, l] = await Promise.all([
+                let [s, a, p, an, l] = await Promise.all([
                     f('/api/status'),
                     f('/api/agent_state'),
                     f('/api/cloud-projects'),
                     f('/api/analytics'),
                     f('/api/logs'),
                 ]);
+
+                // Fallback de proyectos: Si cloud-projects no es array, intentar projects estándar
+                if (!Array.isArray(p)) {
+                    p = await f('/api/projects');
+                }
 
                 // Fallback de status si el tunnel falla (s suele venir vacío o con error)
                 if (!s.llama_status) {
