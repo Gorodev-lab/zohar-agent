@@ -1,24 +1,25 @@
 {
   "version": 2,
   "name": "zohar-agent",
+  "type": "module",
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
     {
       "source": "/api/cloud-projects",
-      "destination": "/api-cloud/cloud-projects.js"
+      "destination": "/api/cloud-projects"
     },
     {
       "source": "/api/cloud-analytics",
-      "destination": "/api-cloud/cloud-analytics.js"
+      "destination": "/api/cloud-analytics"
     },
     {
       "source": "/api/cloud-status",
-      "destination": "/api-cloud/cloud-status.js"
+      "destination": "/api/cloud-status"
     },
     {
-      "source": "/api/:path*",
-      "destination": "https://puny-meals-strive.loca.lt/api/:path*"
+      "source": "/api/(status|agent_state|projects|analytics|logs|control|audit|diagnostics)",
+      "destination": "https://puny-meals-strive.loca.lt/api/$1"
     },
     {
       "source": "/(.*)",
