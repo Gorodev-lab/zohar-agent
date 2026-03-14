@@ -377,8 +377,8 @@
     <div class="topbar">
         <div class="brand">
             <div>
-                <div class="brand-title">Zohar Integrity & Intelligence<span style="color:var(--fg-dim)"> :: </span>Operations Center</div>
-                <div class="brand-sub">National Data Extraction & Strategic Intelligence Pipeline // v2.2</div>
+                <div class="brand-title">Zohar Inteligencia & Integridad<span style="color:var(--fg-dim)"> :: </span>Centro de Operaciones</div>
+                <div class="brand-sub">Pipeline Nacional de Extracción Estratégica // v2.2</div>
             </div>
         </div>
 
@@ -420,17 +420,17 @@
             <div class="ctrl-group">
                 <button class="btn" :class="status.agent_running ? 'btn-restart' : 'btn-start'"
                     @click="controlAgent('restart')"
-                    x-text="status.agent_running ? '[restart]' : '[start]'"></button>
+                    x-text="status.agent_running ? '[reiniciar]' : '[iniciar]'"></button>
                 <button class="btn btn-stop" x-show="status.agent_running"
-                    @click="controlAgent('stop')">[stop]</button>
+                    @click="controlAgent('stop')">[detener]</button>
                 <button class="btn btn-retry"
-                    @click="controlAgent('retry')">[retry-failed]</button>
+                    @click="controlAgent('retry')">[reintentar-fallidos]</button>
             </div>
 
             <div style="width:1px;height:20px;background:var(--border)"></div>
 
             <div style="text-align:right">
-                <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em">CPU TEMP</div>
+                <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em">TEMP CPU</div>
                 <div style="font-size:13px;font-weight:700;color:var(--amber)" x-text="status.cpu_temp || 'N/A'"></div>
             </div>
         </div>
@@ -441,7 +441,7 @@
         <!-- ── DIAG PANEL ── -->
         <div class="section">
             <div class="section-head">
-                <span class="section-title"><span>$</span> system_health_analytics <span style="color:var(--fg-dim)">::</span> high_frequency_monitoring</span>
+                <span class="section-title"><span>$</span> analisis_salud_sistema <span style="color:var(--fg-dim)">::</span> monitoreo_alta_frecuencia</span>
                 <div style="display:flex;align-items:center;gap:12px">
                     <span style="font-size:10px;color:var(--fg-muted)" x-text="diag.ts ? diag.ts.slice(11) : '--:--:--'"></span>
                     <span style="font-size:10px;font-weight:700;letter-spacing:.08em"
@@ -454,7 +454,7 @@
 
                     <!-- SERVICES -->
                     <div>
-                        <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.12em;margin-bottom:8px;text-transform:uppercase">-- operational infrastructure --</div>
+                        <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.12em;margin-bottom:8px;text-transform:uppercase">-- infraestructura operativa --</div>
                         <table class="svc-table">
                             <tr>
                                 <td class="svc-name">llama-server</td>
@@ -464,12 +464,12 @@
                                         'tag-ok':   diag.services?.llama?.status === 'online',
                                         'tag-warn': diag.services?.llama?.status === 'busy',
                                         'tag-err':  diag.services?.llama?.status === 'offline'
-                                    }" x-text="diag.services?.llama?.status || 'unknown'"></span>
+                                    }" x-text="diag.services?.llama?.status || 'desconocido'"></span>
                                 </td>
                             </tr>
                             <tr>
                                 <td colspan="3" class="svc-proc"
-                                    x-text="diag.services?.llama?.procs?.[0] ? diag.services.llama.procs[0].slice(0,80) : '(no process)'"></td>
+                                    x-text="diag.services?.llama?.procs?.[0] ? diag.services.llama.procs[0].slice(0,80) : '(sin proceso)'"></td>
                             </tr>
                             <tr>
                                 <td class="svc-name">ocr-server</td>
@@ -479,38 +479,38 @@
                                         'tag-ok':   diag.services?.ocr?.status === 'online',
                                         'tag-warn': diag.services?.ocr?.status === 'busy',
                                         'tag-err':  diag.services?.ocr?.status === 'offline'
-                                    }" x-text="diag.services?.ocr?.status || 'unknown'"></span>
+                                    }" x-text="diag.services?.ocr?.status || 'desconocido'"></span>
                                 </td>
                             </tr>
                             <tr>
                                 <td colspan="3" class="svc-proc"
-                                    x-text="diag.services?.ocr?.procs?.[0] ? diag.services.ocr.procs[0].slice(0,80) : '(no process)'"></td>
+                                    x-text="diag.services?.ocr?.procs?.[0] ? diag.services.ocr.procs[0].slice(0,80) : '(sin proceso)'"></td>
                             </tr>
                             <tr style="border-top:1px solid var(--border)">
-                                <td class="svc-name">agent</td>
+                                <td class="svc-name">agente</td>
                                 <td class="svc-port">zohar_agent_v2.py</td>
                                 <td style="text-align:right">
                                     <span :class="diag.services?.agent?.running ? 'tag-ok' : 'tag-off'"
-                                          x-text="diag.services?.agent?.running ? 'running' : 'stopped'"></span>
+                                          x-text="diag.services?.agent?.running ? 'ejecutando' : 'detenido'"></span>
                                 </td>
                             </tr>
                             <tr>
                                 <td colspan="3" class="svc-proc"
-                                    x-text="diag.services?.agent?.procs?.[0] ? diag.services.agent.procs[0].slice(0,80) : '(no process)'"></td>
+                                    x-text="diag.services?.agent?.procs?.[0] ? diag.services.agent.procs[0].slice(0,80) : '(sin proceso)'"></td>
                             </tr>
                         </table>
                         <div style="margin-top:10px" class="info-row">
-                            <span class="info-key">csv_rows</span>
+                            <span class="info-key">filas_csv</span>
                             <span class="info-val" x-text="(diag.csv?.rows || 0).toLocaleString()"></span>
                         </div>
                         <div class="info-row">
-                            <span class="info-key">csv_size</span>
+                            <span class="info-key">tamaño_csv</span>
                             <span class="info-val" x-text="(diag.csv?.size_kb || 0) + ' KB'"></span>
                         </div>
                         <div class="info-row">
-                            <span class="info-key">pid_file</span>
+                            <span class="info-key">archivo_pid</span>
                             <span :class="diag.services?.agent?.pid_file ? 'info-val tag-ok' : 'info-val tag-off'"
-                                  x-text="diag.services?.agent?.pid_file ? 'exists' : 'missing'"></span>
+                                  x-text="diag.services?.agent?.pid_file ? 'existe' : 'ausente'"></span>
                         </div>
                     </div>
 
@@ -586,26 +586,26 @@
             </div>
         </div>
 
-        <!-- ── TELEMETRY ── -->
+        <!-- ── TELEMETRÍA ── -->
         <div class="section">
             <div class="section-head">
-                <span class="section-title"><span>$</span> extraction_engine_telemetry</span>
+                <span class="section-title"><span>$</span> telemetria_motor_extraccion</span>
                 <span style="font-size:10px;color:var(--fg-muted)" x-text="agent.time || ''"></span>
             </div>
             <div class="section-body" style="padding:10px 12px">
                 <div class="tel-grid">
                     <div class="tel-box">
-                        <div class="tel-lbl">current_operation</div>
-                        <div class="tel-val" x-text="agent.action || 'STANDBY'"></div>
+                        <div class="tel-lbl">operacion_actual</div>
+                        <div class="tel-val" x-text="agent.action || 'EN_ESPERA'"></div>
                     </div>
                     <div class="tel-box">
-                        <div class="tel-lbl">source_document</div>
-                        <div class="tel-val" style="font-size:12px" x-text="agent.pdf || 'none'"></div>
+                        <div class="tel-lbl">documento_fuente</div>
+                        <div class="tel-val" style="font-size:12px" x-text="agent.pdf || 'ninguno'"></div>
                     </div>
                     <div class="tel-box">
-                        <div class="tel-lbl">operational_identifier</div>
-                        <div class="tel-val" x-text="agent.target || 'NONE'"></div>
-                        <div class="tel-sub">inference heuristic active</div>
+                        <div class="tel-lbl">identificador_operativo</div>
+                        <div class="tel-val" x-text="agent.target || 'NINGUNO'"></div>
+                        <div class="tel-sub">heurística de inferencia activa</div>
                     </div>
                 </div>
             </div>
