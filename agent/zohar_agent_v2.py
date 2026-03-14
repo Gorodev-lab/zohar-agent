@@ -73,7 +73,7 @@ CONFIG = {
     "LLAMA_URL":    os.environ.get("LLAMA_URL", "http://127.0.0.1:8001/v1/chat/completions"),
     "LLAMA_HEALTH": os.environ.get("LLAMA_HEALTH", "http://127.0.0.1:8001/v1/models"),
     "OCR_URL":      os.environ.get("OCR_URL", "http://127.0.0.1:8002/v1/chat/completions"),
-    "MODEL":        os.environ.get("ZOHAR_MODEL", "granite-3.0-8b-instruct-Q4_K_M.gguf"),
+    "MODEL":        os.environ.get("ZOHAR_MODEL", "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"),
     "TEMPERATURE":  float(os.environ.get("ZOHAR_TEMP", "0.2")),
     "MAX_TOKENS":   int(os.environ.get("ZOHAR_MAX_TOKENS", "1000")),
 
@@ -688,7 +688,7 @@ Si no encuentras el municipio pero sí el estado, copia el fragmento del estado.
 Responde SOLAMENTE con el fragmento hallado. Si no hay nada claro, responde "NO_HALLADO".
 """
 
-# Prompt Chaining - Paso 2: Extracción estructurada avanzada (Meta-Prompt Arquitectura v3.0)
+# Prompt Chaining - Paso 2: Extracción estructurada avanzada (Mistral Architecture v1.0)
 EXTRACTION_PROMPT = """\
 <system_instruction>
 Eres un Investigador Senior de la SEMARNAT y Data Scientist experto en ingeniería de datos y análisis forense de documentos gubernamentales. 
