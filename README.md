@@ -37,27 +37,37 @@ zohar-agent/
 
 | Componente | Tecnología |
 |---|---|
-| IA / Inferencia | [llama.cpp](https://github.com/ggerganov/llama.cpp) + Qwen 2.5 1.5B Q4_K_M |
+| Infraestructura | **Docker + Docker Compose** |
+| CI/CD | **GitHub Actions (CDD - Continuous Quality)** |
+| IA / Inferencia | [llama.cpp](https://github.com/ggerganov/llama.cpp) + Qwen / Mistral / Gemini |
 | Backend API | FastAPI + Uvicorn |
-| Frontend | Alpine.js + TailwindCSS CDN |
-| Extracción PDF | pdftotext (poppler) |
-| Base de datos | CSV + JSON Lines (sin dependencias externas) |
-| Grafo de relaciones | Triples RDF-like `.triples` |
-| Hardware objetivo | AMD A8-7410 · 4GB RAM · Arch Linux |
+| Frontend | Alpine.js + TailwindCSS |
+| Extracción | Poppler + Selenium + Gemini Grounding |
+| Base de Datos | SQLite (Gold) + CSV (Silver) |
 
 ---
 
-## Requisitos
+## Despliegue Profesional (Estrategia A)
+
+Para un entorno de producción o de desarrollo profesional, se recomienda usar Docker:
 
 ```bash
-# Sistema
-pdftotext    # pacman -S poppler
-sensors      # pacman -S lm_sensors
-jq           # pacman -S jq
+# 1. Configurar variables de entorno
+cp .env.example .env # y editar según sea necesario
 
-# Python (stdlib puro en el agente — sin pip adicional)
-# API requiere:
-pip install fastapi uvicorn
+# 2. Levantar servicios (Agent + API)
+docker-compose up -d --build
+
+# 3. Ver logs unificados
+docker-compose logs -f
+```
+
+### Garantía de Calidad (TDD)
+El proyecto utiliza un enfoque de **Continuous Quality Assurance**. Puedes ejecutar la suite de pruebas localmente:
+
+```bash
+# Ejecutar suite Red/Green
+pytest test_zohar_agent.py test_zohar_api.py
 ```
 
 ---
@@ -87,6 +97,17 @@ bash zohar_ctl.sh start-daemon # modo 24/7
 
 ---
 
+## Características de Inteligencia (Fase 2 & 3)
+
+| Módulo | Funcionalidad | Estado |
+|---|---|---|
+| **Agentic Chain of Custody** | Captura de razonamiento LLM y extractos de fuente (Grounding) por cada registro. | ✅ Producción |
+| **Optimización Predictiva** | Deduplicación semántica cross-year para evitar conteo doble de proyectos recurrentes. | ✅ Producción |
+| **Gobernanza de Datos** | Dashboard HITL (Human-in-the-Loop) para auditoría manual de registros. | ✅ Producción |
+| **Señales de Alerta** | Detección automática de anomalías (ej. Alta Densidad de Proponentes). | ✅ Producción |
+
+---
+
 ## Comandos del Agente
 
 | Comando | Descripción |
@@ -98,6 +119,7 @@ bash zohar_ctl.sh start-daemon # modo 24/7
 | `zohar_ctl.sh status` | Estado, queue, CSV rows, gacetas vistas |
 | `zohar_ctl.sh logs` | Stream de logs en tiempo real |
 | `zohar_ctl.sh inspect` | Dashboard TUI de la queue |
+| `zohar_ctl.sh dedup-rebuild` | Escanea el histórico para vincular duplicados semánticos |
 | `zohar_ctl.sh retry-failed` | Resetear IDs fallidos a pendiente |
 | `zohar_ctl.sh reset-seen` | Forzar re-escaneo de todas las gacetas |
 

@@ -188,7 +188,20 @@ class PersistentQueue:
         if self.path.exists():
             try:
                 raw = json.loads(self.path.read_text())
-                self._d = {k: QueueItem(**v) for k, v in raw.items()}
+                # Casting robusto para evitar lints y errores de tipo en carga
+                self._d = {
+                    k: QueueItem(
+                        pid=v.get("pid", k),
+                        pdf=v.get("pdf", ""),
+                        year=int(v.get("year", 2024)),
+                        txt_file=v.get("txt_file", ""),
+                        attempts=int(v.get("attempts", 0)),
+                        status=v.get("status", "pending"),
+                        last_error=v.get("last_error", ""),
+                        added_at=v.get("added_at", ""),
+                        updated_at=v.get("updated_at", "")
+                    ) for k, v in raw.items()
+                }
             except Exception:
                 self._d = {}
 
@@ -323,12 +336,27 @@ class LocalIntelligenceMemory:
                         municipio TEXT,
                         sector TEXT,
                         insight TEXT,
+                        reasoning TEXT,
+                        context_snippet TEXT,
                         grounded BOOLEAN,
                         sources TEXT,
+                        audit_status TEXT DEFAULT 'pending',
+                        auditor_notes TEXT,
+                        confidence_score INTEGER,
+                        cross_year_link TEXT,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_grounded ON projects(grounded)")
+                # Migración dinámica (Cap. 16 - Evolution)
+                cols = [row[1] for row in conn.execute("PRAGMA table_info(projects)").fetchall()]
+                if "reasoning" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN reasoning TEXT")
+                if "context_snippet" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN context_snippet TEXT")
+                if "audit_status" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN audit_status TEXT DEFAULT 'pending'")
+                if "auditor_notes" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN auditor_notes TEXT")
+                if "confidence_score" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN confidence_score INTEGER")
+                if "cross_year_link" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN cross_year_link TEXT")
+
         except Exception as e:
             logging.getLogger("zohar").error(f"  ❌ Error inicializando DB: {e}")
 
@@ -340,21 +368,75 @@ class LocalIntelligenceMemory:
         except Exception:
             return False
 
-    def store_project(self, pid: str, year: int, d: dict):
+    def find_semantic_duplicate(self, project_name: str, promovente: str) -> Optional[dict]:
+        """
+        Busca si un proyecto similar (mismo nombre y promovente) ya existe en memoria.
+        Ignora el PID y el año para detectar re-apariciones.
+        """
+        if not project_name or not promovente: return None
         try:
-            # d.get("grounded", False) might be a string "True"/"False" from some extractions
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                # Búsqueda difusa simplificada (mismo inicio de nombre)
+                query = """
+                    SELECT * FROM projects 
+                    WHERE proyecto LIKE ? AND promovente LIKE ?
+                    LIMIT 1
+                """
+                # Usamos los primeros 20 caracteres para evitar variaciones menores en el nombre
+                name_prefix = f"{project_name[:20]}%"
+                prom_prefix = f"{promovente[:15]}%"
+                cur = conn.execute(query, (name_prefix, prom_prefix))
+                res = cur.fetchone()
+                return dict(res) if res else None
+        except Exception as e:
+            logging.getLogger("zohar").error(f"  [Semantic-Search] Error: {e}")
+            return None
+
+    def get_proponent_reputation(self, promovente: str) -> dict:
+        """
+        Calcula la reputación corporativa de un promovente basada en auditorías previas.
+        """
+        if not promovente: return {"score": 0, "status": "unknown"}
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                query = """
+                    SELECT 
+                        COUNT(*) as total,
+                        SUM(CASE WHEN audit_status = 'audited' THEN 1 ELSE 0 END) as approved,
+                        SUM(CASE WHEN audit_status = 'rejected' THEN 1 ELSE 0 END) as rejected
+                    FROM projects 
+                    WHERE promovente = ?
+                """
+                res = conn.execute(query, (promovente,)).fetchone()
+                total, approved, rejected = res or (0, 0, 0)
+                
+                if total == 0: return {"score": 0, "status": "new"}
+                
+                # Ratio de éxito
+                ratio = (approved / total) * 100 if total > 0 else 0
+                status = "trusted" if ratio > 80 and approved >= 2 else "risky" if rejected > 0 else "neutral"
+                
+                return {"score": ratio, "status": status, "count": total}
+        except Exception:
+            return {"score": 0, "status": "error"}
+
+    def store_project(self, pid: str, year: int, d: dict, score: int = 0):
+        try:
             is_grounded = str(d.get("grounded", "False")).lower() == "true"
             if d.get("fuentes_web"): is_grounded = True
             
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO projects 
-                    (pid, year, promovente, proyecto, estado, municipio, sector, insight, grounded, sources)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (pid, year, promovente, proyecto, estado, municipio, sector, insight, reasoning, context_snippet, grounded, sources, confidence_score)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     pid, year, d.get("promovente"), d.get("proyecto"), d.get("estado"),
                     d.get("municipio"), d.get("sector"), d.get("insight"),
-                    1 if is_grounded else 0, json.dumps(d.get("fuentes_web", []))
+                    d.get("reasoning"), d.get("context_snippet"),
+                    1 if is_grounded else 0, json.dumps(d.get("fuentes_web", [])),
+                    score
                 ))
         except Exception as e:
             logging.getLogger("zohar").error(f"  ❌ Error guardando en DB: {e}")
@@ -521,14 +603,26 @@ HEADERS = {
 }
 
 def http_get(url: str, timeout: int = 45, binary: bool = False):
-    """GET simple. Retorna bytes si binary=True, str si False. None si falla."""
+    """
+    GET robusto con reintentos y manejo de errores (Pilar Automate the Boring Stuff).
+    Implementa SRE Network Integrity.
+    """
     req = urllib.request.Request(url, headers=HEADERS)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = r.read()
-            return data if binary else data.decode("utf-8", errors="replace")
-    except Exception as e:
-        return None
+    MAX_RETRY = 2
+    
+    for attempt in range(MAX_RETRY + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = r.read()
+                return data if binary else data.decode("utf-8", errors="replace")
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < MAX_RETRY:
+                time.sleep(2 * (attempt + 1))
+                continue
+            return None
+        except Exception:
+            return None
+    return None
 
 
 # ─────────────────────────────────────────────────────────
@@ -712,6 +806,29 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
     raw_prom  = str(data.get("promovente", "")).upper().strip()
     raw_coord = str(data.get("coordenadas", "")).strip()
     raw_poly  = str(data.get("poligono", "")).strip()
+    
+    # helper de normalización de coordenadas
+    def _normalize_coords(text):
+        if not text or len(text) < 5: return text
+        # 1. Intentar patrón decimal simple: 19.42, -99.12
+        if re.match(r'^-?\d+\.\d+,\s*-?\d+\.\d+$', text):
+            return text
+
+        # 2. Buscar patrón DMS o Decimal con Hemisferio: 19°25'42"N, 99°10'15"W o 19.42°N
+        # Soporta: 19°N, 19.4°N, 19°25'N, 19°25'42"N
+        m = re.findall(r'(\d+\.?\d*)°\s*(?:(\d+)\')?\s*(?:(\d+)\")?\s*([NSEW])', text.upper())
+        if len(m) >= 2:
+            coords = []
+            for deg, min, sec, hem in m:
+                d = float(deg)
+                if min: d += float(min) / 60
+                if sec: d += float(sec) / 3600
+                if hem in ['S', 'W']: d *= -1
+                coords.append(f"{d:.5f}")
+            return ", ".join(coords)
+        return text
+
+    raw_coord = _normalize_coords(raw_coord)
     
     # 2. Forzar Estado correcto según los 2 primeros dígitos del PID (Standard SEMARNAT)
     state_code = pid[:2]
@@ -985,6 +1102,57 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
         return None
 
 
+# Prompt Maestro optimizado bajo el estándar UDP (Universal Developer Prompt) del Codex Gemini 3
+DEFAULT_EXTRACTION_PROMPT = """
+<role_persona>
+Act as an Esoteria Principal Intelligence Lead specialized in Mexican environmental forensics.
+Your mission is to structure chaotic, noisy data from official gazettes into high-fidelity intelligence.
+</role_persona>
+
+<context>
+PROJECT_ID: {pid}
+LOCATION_STUB: {location_snippet}
+RAW_TEXT_FROM_PDF:
+{context}
+</context>
+
+<constraints>
+1. NEVER hallucinate geographic entities. Use INEGI standards.
+2. If 'EL ID' or 'ID_PROYECTO' appear near locations, they are metadata noise. REJECT THEM.
+3. The 'INSIGHT' field MUST start with an action verb (Construcción, Operación, etc.) and specify 2-3 technical parameters.
+4. If context is insufficient, mark 'grounded': false.
+</constraints>
+
+<task_goal>
+Perform a forensic extraction of the project details.
+Follow the Step-by-Step reasoning before outputting the final JSON.
+</task_goal>
+
+<output_format>
+Format your response exactly as:
+<razonamiento>
+[Step 1: Noise identification]
+[Step 2: Geo-validation with INEGI]
+[Step 3: Synthesis of technical parameters]
+</razonamiento>
+
+<output_json>
+{{
+  "estado": "STRING",
+  "municipio": "STRING",
+  "localidad": "STRING",
+  "proyecto": "STRING",
+  "promovente": "STRING",
+  "sector": "STRING",
+  "insight": "STRING",
+  "coordenadas": "STRING",
+  "poligono": "STRING",
+  "grounded": "BOOLEAN"
+}}
+</output_json>
+</output_format>
+"""
+
 def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
     """
     Pipeline de extracción híbrido.
@@ -1055,32 +1223,43 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str =
         if m:
             json_match = m.group(1).strip()
         
-        # Estrategia B: Búsqueda heurística de { ... }
+        # Estrategia B: Búsqueda heurística agresiva de { ... } (Automate the Boring Stuff)
         if not json_match or "{" not in json_match:
-            m = re.search(r'\{[\s\S]*?\}', raw)
-            if m:
-                json_match = m.group(0).strip()
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                json_match = raw[start : end + 1].strip()
         
         if json_match:
+            # Capturar razonamiento si existe
+            reasoning = ""
+            razon_m = re.search(r'<razonamiento>\s*(.*?)\s*(?:</razonamiento>|$)', raw, re.DOTALL)
+            if razon_m:
+                reasoning = razon_m.group(1).strip()
+
             # Limpieza profunda de ruido tabular inyectado en el JSON
-            # Quitar bloques de código MD
             json_match = re.sub(r'```json\s*', '', json_match)
             json_match = re.sub(r'```', '', json_match)
-            # Quitar posibles razonamientos que se filtraron
-            json_match = re.sub(r'<razonamiento>.*?</razonamiento>', '', json_match, flags=re.DOTALL)
             # Reparar comas finales erróneas
             json_match = re.sub(r',\s*\}', '}', json_match)
             json_match = re.sub(r',\s*\]', ']', json_match)
-            # Quitar placeholders literales que el modelo aún inyecta a veces
-            for p_term in PLACEHOLDER_TERMS:
-                if p_term and len(p_term) > 3:
-                     json_match = re.sub(f'(?i)"{re.escape(p_term)}"', '""', json_match)
-
             try:
                 extracted = json.loads(json_match)
-                # Normalizar keys a minúsculas para consistencia interna
-                extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
-                return extracted
+                # Normalizar keys a minúsculas y limpiar valores
+                cleaned = {}
+                for k, v in extracted.items():
+                    key = k.lower().strip()
+                    val = str(v).strip()
+                    # Si el VALOR es un placeholder, lo limpiamos
+                    if val.lower() in PLACEHOLDER_TERMS:
+                        val = ""
+                    cleaned[key] = val
+                
+                # Inyectar Chain of Custody
+                cleaned["reasoning"] = reasoning
+                cleaned["context_snippet"] = location_snippet
+                
+                return cleaned
             except json.JSONDecodeError as e:
                 log.debug(f"    JSON Auditor Alert (attempt {attempt}): {e} — snippet: {json_match[:100]!r}")
                 time.sleep(2)
@@ -1164,27 +1343,28 @@ def write_to_supabase(year: int, pid: str, d: dict, log: logging.Logger):
 # ─────────────────────────────────────────────────────────
 def fetch_portal_docs(pid: str, log: logging.Logger) -> dict:
     """
-    Consulta la API del portal SEMARNAT para obtener metadatos
-    y rutas de documentos asociados al proyecto.
-
-    La API no requiere autenticación para metadatos básicos.
-    Retorna dict con claves: bitacora, titulo, documentos[]
+    Consulta la API del portal SEMARNAT con reintentos robustos (Backoff Exponencial).
+    Implementa SRE strategy del Codex Cap 10.2.
     """
-    # Endpoint público de metadatos del proyecto
     api_url = CONFIG["PORTAL_API_BASE"] + urllib.parse.quote(pid)
+    
+    for attempt in range(1, 4):
+        log.info(f"  🌐 Portal: consultando {pid} (Intento {attempt})")
+        content = http_get(api_url, timeout=35 * attempt) # Timeout creciente
+        
+        if content:
+            try:
+                data = json.loads(content)
+                return data
+            except json.JSONDecodeError:
+                log.debug(f"    Remote source: non-JSON response for {pid}")
+                return {}
+        
+        log.warning(f"    ⚠️ Timeout/Error en portal para {pid}. Esperando reintento...")
+        time.sleep(5 * attempt) # Backoff simple
 
-    log.info(f"  🌐 Portal: consultando {pid}")
-    content = http_get(api_url, timeout=30)
-    if content is None:
-        log.warning(f"    Remote source timeout for {pid}")
-        return {}
-
-    try:
-        data = json.loads(content)
-        return data
-    except json.JSONDecodeError:
-        log.debug(f"    Remote source: non-JSON response for {pid}")
-        return {}
+    log.error(f"    ❌ Fallo definitivo tras 3 intentos para {pid}")
+    return {}
 
 def download_document(pid: str, doc_url: str, doc_type: str, log: logging.Logger) -> Optional[Path]:
     """
@@ -1313,12 +1493,22 @@ FIELD_WEIGHTS = {
 }
 
 PLACEHOLDER_TERMS = {
-    "desconocido", "null", "none", "n/a", "na", "", "proyecto en evaluación",
-    "extracción automática", "migrado", "...", "sin detalles",
-    "project name", "project description", "municipality", "id_proyecto", "el id", 
-    "nombre específico", "nombre legal", "generic name", "placeholder", "undefined",
-    "nombre del proyecto", "nombre del promovente", "entidad federativa",
-    "busque el nombre", "error de extracción", "sin información"
+    # Términos genéricos
+    "desconocido", "null", "none", "n/a", "na", "", "...", "undefined", "placeholder",
+    # Textos de la plataforma Semarnat (Falsos positivos comunes)
+    "sistema de gestión", "proyecto de inversión", "información del proyecto",
+    "estudio de impacto", "estudio de sustentabilidad", "extracción automática",
+    "proyecto en evaluación", "bitácora del trámite", "consulta de trámites",
+    "gaceta ecológica", r"semarnat gazette", r"gaceta semarnat", "listado de proyectos", "resumen del proyecto",
+    # Instrucciones o nombres de campos (Alucinaciones de prompt)
+    "id_proyecto", "el id", "nombre del proyecto", "nombre del promovente",
+    "entidad federativa", "busque el nombre", "error de extracción", "sin información",
+    "nombre específico", "nombre legal", "generic name", "project name", 
+    "project description", "municipality", "promovente", "extrae el",
+    # Casos de "pereza" del modelo o fragmentos sin sentido
+    "sin detalles", "migrado", "ver gaceta", "descubre la", "programa de",
+    "recursos humanos", "méxico", "ciudad de méxico", "sida", "aeromar", "campus mexican",
+    "error de comunicación", "modelo no disponible", "sin datos"
 }
 
 
@@ -1415,8 +1605,8 @@ def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
 
     Retorna True si el registro fue persistido correctamente.
     """
-    SCORE_ACCEPT   = 70   # Umbral mínimo para persistir
-    SCORE_HIGH_Q   = 80   # Umbral de alta confianza (log diferenciado)
+    SCORE_ACCEPT   = 85   # Umbral MÁXIMO de rigor (Integridad de Doctrina Esoteria)
+    SCORE_HIGH_Q   = 95   # Umbral de extrema confianza
 
     # ── Paso 1: Normalización inicial ────────────────────────────────────
     d = normalize_extracted_data(pid, d)
@@ -1441,22 +1631,38 @@ def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
         log.debug(f"    [Gate-3 post-repair] {pid} score={score}")
 
     # ── Paso 4: Decisión final ───────────────────────────────────────────
+    # Aumentamos exigencia para evitar datos erráticos en dashboard
     if score < SCORE_ACCEPT:
-        log.warning(f"    [REJECT] {pid} score={score} < {SCORE_ACCEPT} — deficiente: {deficient}")
+        # Si tiene portal_data y aun así es bajo, es probable que el portal no tenga datos reales aún
+        log.warning(f"    [REJECT] {pid} score={score} < {SCORE_ACCEPT} — insuficiente para INTEGRIDAD DE DATOS. Deficiente: {deficient}")
         queue.mark_attempt(pid, error=f"quality_score={score} deficient={deficient}")
         return False
 
     # ── Paso 5: Persistencia ─────────────────────────────────────────────
     if not CONFIG["DRY_RUN"]:
+        # Verificación Semántica Cross-Year (Fase 3: Optimización Predictiva)
+        if memory:
+            dup = memory.find_semantic_duplicate(d.get("proyecto", ""), d.get("promovente", ""))
+            if dup and dup["pid"] != pid:
+                log.info(f"    [Trace] Linked to previous intelligence: {dup['pid']} ({dup['year']})")
+                d["reasoning"] = (d.get("reasoning", "") + 
+                                f" [INTELLIGENCE_LINK: Re-aparición de proyecto {dup['pid']} del año {dup['year']}]").strip()
+                # Marcar para el dashboard
+                d["cross_year_link"] = dup["pid"]
+
         # Persistencia local Gold Standard (SQLite)
         if memory:
-            memory.store_project(pid, year, d)
+            memory.store_project(pid, year, d, score)
             
         write_to_csv(year, pid, d)
         write_to_graph(pid, d)
         write_to_supabase(year, pid, d, log)
         if portal_data:
             _process_portal_docs(pid, portal_data, log)
+            
+        # Señal de Inteligencia: Densidad de Promovente (Cap. 13 - Gov)
+        if memory:
+            _flag_proponent_density(pid, d, memory, log)
 
     queue.mark_success(pid)
 
@@ -1469,6 +1675,24 @@ def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
         pid=pid, score=score, promovente=d.get("promovente", ""),
     )
     return True
+
+def _flag_proponent_density(pid: str, d: dict, memory: LocalIntelligenceMemory, log: logging.Logger):
+    """
+    Detecta si un promovente tiene una concentración inusual de proyectos (Gobernanza).
+    """
+    prom = d.get("promovente")
+    year = d.get("year", 2024)
+    if not prom or not memory: return
+    
+    try:
+        with sqlite3.connect(memory.db_path) as conn:
+            cur = conn.execute("SELECT COUNT(*) FROM projects WHERE promovente = ? AND year = ?", (prom, year))
+            count = cur.fetchone()[0]
+            if count > 3:
+                log.warning(f"  [SIGNAL] High density for '{prom}' ({count} items) — FLAG")
+                conn.execute("UPDATE projects SET audit_status = 'flagged', auditor_notes = 'High density detected' WHERE pid = ?", (pid,))
+    except Exception as e:
+        log.error(f"  ❌ Gov Signal Error: {e}")
 
 
 # ─────────────────────────────────────────────────────────
@@ -1492,7 +1716,6 @@ def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], str]:
     # ── COMPUERTA DE MEMORIA (Cap. 16) ───────────────────────────
     if memory and memory.project_exists(item.pid):
         log.info(f"    [Memory] {item.pid} found in local intelligence — skipping")
-        queue.mark_success(item.pid)
         return None, "SKIPPED_BY_MEMORY"
 
     # Gate A: archivo existe
@@ -1578,6 +1801,10 @@ def run_extraction(queue: PersistentQueue, log: logging.Logger):
 
             # ── Extracción con compuertas de contexto ─────────────────────
             extracted, context = _extract_single(item, log)
+
+            if context == "SKIPPED_BY_MEMORY":
+                queue.mark_success(item.pid)
+                continue
 
             if extracted is None:
                 # Determinar razón exacta del fallo

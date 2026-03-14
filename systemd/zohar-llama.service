@@ -1,0 +1,13 @@
+[Unit]
+Description=Zohar Llama Server (Qwen 1.5B or Mock)
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/home/gorops/proyectos antigravity/zohar-agent/.env
+ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" -m llama_cpp.server --model "/home/gorops/models/${ZOHAR_MODEL}" --host 127.0.0.1 --port 8001 --n_ctx 4096 --n_threads 8 --n_gpu_layers 33 --main_gpu 0
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

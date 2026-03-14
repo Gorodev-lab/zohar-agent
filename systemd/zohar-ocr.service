@@ -1,0 +1,12 @@
+[Unit]
+Description=Zohar OCR Vision Server (Qwen2-VL)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" -m llama_cpp.server --model "/home/gorops/models/qwen2-vl-2b-instruct-q4_k_m.gguf" --mmproj "/home/gorops/models/mmproj-qwen2-vl-2b-instruct-f16.gguf" --host 127.0.0.1 --port 8002 --n_ctx 4096 --n_threads 4
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target
