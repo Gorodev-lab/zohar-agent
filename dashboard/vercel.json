@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://bitter-zebras-arrive.loca.lt/api/:path*"
+      "destination": "https://yummy-paws-do.loca.lt/api/:path*"
     }
   ]
 }
