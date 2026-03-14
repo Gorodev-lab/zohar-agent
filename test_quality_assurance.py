@@ -31,7 +31,7 @@ def test_correct_conjunction_in_dashboard():
 
 def test_vercel_proxy_sync():
     root = "/home/gorops/proyectos antigravity/zohar-agent"
-    vercel_path = os.path.join(root, "dashboard/vercel.json")
+    vercel_path = os.path.join(root, "vercel.json")
     tunnel_path = os.path.join(root, "tunnel_url.txt")
     
     if not os.path.exists(tunnel_path):

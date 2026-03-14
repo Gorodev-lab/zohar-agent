@@ -6,7 +6,7 @@
 
 BASE_DIR="/home/gorops/proyectos antigravity/zohar-agent"
 TUNNEL_FILE="$BASE_DIR/tunnel_url.txt"
-VERCEL_JSON="$BASE_DIR/dashboard/vercel.json"
+VERCEL_JSON="$BASE_DIR/vercel.json"
 VENV_PYTHON="$BASE_DIR/zohar_venv/bin/python3"
 LOG_FILE="$BASE_DIR/agent/watchdog.log"
 
