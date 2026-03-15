@@ -669,12 +669,12 @@
             <div class="section-body">
                 <div class="analytics-grid">
                     <div>
-                        <div style="font-size:10px;color:var(--fg-dim);margin-bottom:4px">cumulative_entity_analysis</div>
+                        <div style="font-size:10px;color:var(--fg-dim);margin-bottom:4px">analisis_acumulado_entidades</div>
                         <div class="big-num" x-text="(analytics.total||0).toLocaleString()"></div>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
                         <div>
-                            <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em;margin-bottom:6px">regional_distribution</div>
+                            <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em;margin-bottom:6px">distribucion_regional</div>
                             <template x-for="st in (analytics.top_states||[])">
                                 <div class="info-row">
                                     <span class="info-key" style="text-transform:lowercase" x-text="st[0].toLowerCase()"></span>
@@ -683,7 +683,7 @@
                             </template>
                         </div>
                         <div>
-                            <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em;margin-bottom:6px">primary_proponents</div>
+                            <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em;margin-bottom:6px">promoventes_principales</div>
                             <template x-for="pr in (analytics.top_promoters||[])">
                                 <div class="info-row" style="gap:8px">
                                     <span class="info-key" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px" x-text="pr[0]"></span>
@@ -700,9 +700,9 @@
         <div class="section">
             <div class="section-head">
                 <span class="section-title"><span>$</span> select * from verified_intelligence_ledger
-                    <span style="color:var(--fg-dim)"> // grounded_entities_only // zero_hallucination_filter</span></span>
+                    <span style="color:var(--fg-dim)"> // solo_entidades_fundamentadas // filtro_cero_alucinaciones</span></span>
                 <div style="display:flex;align-items:center;gap:8px">
-                    <span style="font-size:10px;color:var(--fg-dim)" x-text="projects.length + ' rows'"></span>
+                    <span style="font-size:10px;color:var(--fg-dim)" x-text="projects.length + ' filas'"></span>
                     <span class="dot dot-ok"></span>
                 </div>
             </div>
@@ -729,7 +729,7 @@
                                         <span x-text="p.ID_PROYECTO"></span>
                                         <span class="audit-tag" :class="'status-' + (p.audit_status || 'pending')" x-text="p.audit_status || 'pending'"></span>
                                     </div>
-                                    <div class="score-bar" :title="'Confidence Score: ' + p.confidence_score">
+                                    <div class="score-bar" :title="'Nivel de Confianza: ' + p.confidence_score">
                                         <div class="score-fill" :style="'width:' + (p.confidence_score || 0) + '%; background:' + (p.confidence_score > 90 ? 'var(--green)' : p.confidence_score > 80 ? 'var(--cyan)' : 'var(--amber)')"></div>
                                     </div>
                                     <div class="audit-actions" x-show="p.audit_status !== 'audited' && p.audit_status !== 'rejected'">
@@ -769,13 +769,13 @@
                             </tr>
                         </template>
                         <template x-if="projects.length === 0">
-                            <tr><td colspan="6" class="empty-row">waiting for data feed...</td></tr>
+                            <tr><td colspan="6" class="empty-row">esperando flujo de datos...</td></tr>
                         </template>
                     </tbody>
                 </table>
             </div>
             <div class="tbl-footer">
-                <span>zohar-core-engine v2.2 // compute-optimized</span>
+                <span>zohar-core-engine v2.2 // computo-optimizado</span>
                 <span x-text="new Date().toLocaleTimeString()"></span>
             </div>
         </div>
@@ -789,17 +789,17 @@
             <button class="drawer-close" @click="selectedProject = null">&times;</button>
         </div>
         <div class="drawer-body">
-            <div class="drawer-label">Project Intelligence</div>
+            <div class="drawer-label">Inteligencia de Proyecto</div>
             <div style="font-size: 13px; font-weight: 700; margin-top: 5px;" x-text="selectedProject?.PROYECTO"></div>
             <div style="font-size: 11px; color: var(--fg-dim); margin-top: 2px;" x-text="selectedProject?.PROMOVENTE"></div>
 
-            <div class="drawer-label">Agentic Reasoning (Inner Monologue)</div>
-            <div class="reasoning-box" x-text="selectedProject?.REASONING || 'No inference trace available for this record.'"></div>
+            <div class="drawer-label">Razonamiento de Modelo (Monólogo Fijo)</div>
+            <div class="reasoning-box" x-text="selectedProject?.REASONING || 'Ningún rastro de inferencia disponible para este registro.'"></div>
 
-            <div class="drawer-label">Source Evidence (PDF Snippet)</div>
-            <div class="snippet-box" x-text="selectedProject?.SNIPPET || 'Data extracted via legacy pipeline or direct grounding.'"></div>
+            <div class="drawer-label">Evidencia Fuente (Fragmento PDF)</div>
+            <div class="snippet-box" x-text="selectedProject?.SNIPPET || 'Datos extraídos mediante pipeline heurístico o fundamentación directa.'"></div>
 
-            <div class="drawer-label">Verification Assets</div>
+            <div class="drawer-label">Activos de Verificación</div>
             <div style="margin-top: 8px;">
                 <template x-for="f in (typeof selectedProject?.FUENTES === 'string' ? JSON.parse(selectedProject?.FUENTES || '[]') : (selectedProject?.FUENTES || []))">
                     <a :href="f" target="_blank" class="audit-btn" style="display: block; margin-bottom: 4px; text-decoration: none; text-align: center;">Verified Source (Web)</a>
