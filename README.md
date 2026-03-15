@@ -139,12 +139,18 @@ bash zohar_ctl.sh start-daemon # modo 24/7
         ├── resumen.pdf        Resumen Ejecutivo
         └── resolutivo.pdf     Resolución SEMARNAT
 
-~/zohar_historico_proyectos.csv    Base de datos nacional
-~/zohar_grafo.triples              Grafo de relaciones (promovente, estado)
-~/zohar-agent/agent/
-├── zohar_queue.json               Queue persistente de IDs
-├── zohar_seen_gacetas.json        Hashes para detectar cambios
-└── zohar_agent.jsonl              Log estructurado JSON Lines
+## Despliegue Híbrido (Local + Vercel)
+
+El sistema opera bajo una arquitectura de **Observabilidad Aterrizada**:
+
+1.  **Procesamiento Local**: El motor de extracción (`agent/zohar_agent_v2.py`) corre en tu hardware local para aprovechar la potencia del LLM y acceder a la red gubernamental. Los datos se sincronizan automáticamente con **Supabase**.
+2.  **Dashboard en Vercel**: El dashboard (`/dashboard`) se despliega en Vercel para acceso global. Este lee directamente de Supabase ("información aterrizada"), permitiendo monitorear los resultados sin exponer tu infraestructura local.
+
+Para desplegar el dashboard en Vercel:
+```bash
+# Solo se requiere la carpeta dashboard y vercel.json
+vercel deploy
+```
 ```
 
 ---
