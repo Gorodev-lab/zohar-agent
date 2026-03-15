@@ -4,9 +4,9 @@ After=network.target zohar-llama.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/gorops/proyectos antigravity/zohar-agent/api
-Environment="PATH=/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin:/usr/bin:/bin"
-ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" zohar_api.py
+User=gorops
+WorkingDirectory=/home/gorops/zohar-agent/api
+ExecStart=/home/gorops/zohar-agent/zohar_venv/bin/python zohar_api.py
 Restart=always
 RestartSec=5
 
