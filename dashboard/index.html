@@ -421,10 +421,12 @@
                 <button class="btn" :class="status.agent_running ? 'btn-restart' : 'btn-start'"
                     @click="controlAgent('restart')"
                     x-text="status.agent_running ? '[reiniciar]' : '[iniciar]'"></button>
+                <button class="btn btn-restart" style="color:var(--cyan)"
+                    @click="controlAgent('sweep')">[barrido-histórico]</button>
                 <button class="btn btn-stop" x-show="status.agent_running"
                     @click="controlAgent('stop')">[detener]</button>
                 <button class="btn btn-retry"
-                    @click="controlAgent('retry')">[reintentar-fallidos]</button>
+                    @click="controlAgent('retry-failed')">[reintentar-fallidos]</button>
             </div>
 
             <div style="width:1px;height:20px;background:var(--border)"></div>
