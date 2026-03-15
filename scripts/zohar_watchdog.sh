@@ -33,16 +33,7 @@ if ! "$VENV_PYTHON" -m pytest test_quality_assurance.py >> "$LOG_FILE" 2>&1; the
     if [ -n "$NEW_URL" ]; then
         echo "[$(date)] ✅ Nuevo túnel: $NEW_URL" >> "$LOG_FILE"
         echo "your url is: $NEW_URL" > "$TUNNEL_FILE"
-        
-        # Actualizar vercel.json
-        sed -i "s|https://.*\.loca\.lt/api/|${NEW_URL}/api/|g" "$VERCEL_JSON"
-        
-        # Sincronizar con Vercel vía Git (Despliegue automático)
-        git add "$VERCEL_JSON" "$TUNNEL_FILE"
-        git commit -m "fix(qa): watchdog auto-recovery of tunnel $NEW_URL"
-        git push origin master >> "$LOG_FILE" 2>&1
-        
-        echo "[$(date)] 🚀 Dashboard actualizado y desplegado en Vercel." >> "$LOG_FILE"
+        echo "[$(date)] 🚀 Tunnel re-generado para accesibilidad local." >> "$LOG_FILE"
     else
         echo "[$(date)] ❌ ERROR: No se pudo obtener nueva URL del túnel." >> "$LOG_FILE"
     fi
