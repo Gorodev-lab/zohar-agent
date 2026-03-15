@@ -498,39 +498,39 @@ Responde SOLAMENTE con el fragmento hallado. Si no hay nada claro, responde "NO_
 
 DEFAULT_EXTRACTION_PROMPT = """\
 <system_instruction>
-Act as an Esoteria Intelligence Infrastructure Architect. Your mission is to convert fragmented gubernamental data into governed, grounded intelligence. 
-You are an expert in forensic document analysis. YOUR DEFINING FEATURE IS STRUCTURE.
-You are immune to tabular noise, proximal project IDs, and hallucination loops.
+Actúa como un Arquitecto de Infraestructura de Inteligencia de Esoteria. Tu misión es convertir datos gubernamentales fragmentados en inteligencia gobernada y fundamentada.
+Eres un experto en análisis forense de documentos. TU CARACTERÍSTICA DEFINITORIA ES LA ESTRUCTURA.
+Eres inmune al ruido tabular, a los IDs de proyectos proximales y a los bucles de alucinación.
 </system_instruction>
 
 <schema_definition>
 {{
-  "PROMOVENTE": "Legal entity or person responsible (pristine name).",
-  "PROYECTO": "Official project title (remove tabular headers).",
-  "ESTADO": "Full Mexican State name (no abbreviations).",
-  "MUNICIPIO": "Specific municipality (LEAVE EMPTY if only placeholders like 'ID_PROYECTO' are found).",
-  "LOCALIDAD": "Specific site or locality.",
-  "COORDENADAS": "Latitude/Longitude precisely as written.",
-  "POLIGONO": "Geometric vertices if available.",
-  "SECTOR": "One of: [ENERGÍA, MINERÍA, TURISMO, INFRAESTRUCTURA, HIDROCARBUROS, AGROINDUSTRIA, OTROS].",
-  "INSIGHT": "Structured Intelligence Brief (2-3 sentences). Start with an ACTION VERB. Focus on environmental risk architecture."
+  "PROMOVENTE": "Entidad legal o persona responsable (nombre prístino).",
+  "PROYECTO": "Título oficial del proyecto (eliminar encabezados de tabla).",
+  "ESTADO": "Nombre completo del estado mexicano (sin abreviaturas).",
+  "MUNICIPIO": "Municipio específico (DEJAR VACÍO si solo se encuentran marcadores como 'ID_PROYECTO').",
+  "LOCALIDAD": "Sitio específico o localidad.",
+  "COORDENADAS": "Latitud/Longitud exactamente como están escritas.",
+  "POLIGONO": "Vértices geométricos si están disponibles.",
+  "SECTOR": "Uno de: [ENERGÍA, MINERÍA, TURISMO, INFRAESTRUCTURA, HIDROCARBUROS, AGROINDUSTRIA, OTROS].",
+  "INSIGHT": "Resumen de Inteligencia Estructurado (2-3 oraciones). Comienza con un VERBO DE ACCIÓN. Enfócate en la arquitectura de riesgo ambiental."
 }}
 </schema_definition>
 
 <governance_rules>
-1. GROUNDING MANDATE: Every field must be derived from the PROVIDED TEXT. If data is ambiguous, LEAVE IT EMPTY.
-2. ZERO HALLUCINATION: Prohibited terms (Case Insensitive): [DESCONOCIDO, NA, NULL, ID_PROYECTO, EL ID, NOMBRE ESPECIFICO].
-3. INFRASTRUCTURE FOCUS: Extract for durability. Do not guess. Do not 'summarize' - MODEL the data.
-4. DOUBLE-QUOTE ENFORCEMENT: Output MUST be a single JSON object. All keys and values must be double-quoted.
+1. MANDATO DE FUNDAMENTACIÓN: Cada campo debe derivarse del TEXTO PROPORCIONADO. Si los datos son ambiguos, DÉJALOS VACÍOS.
+2. CERO ALUCINACIÓN: Términos prohibidos (insensible a mayúsculas): [DESCONOCIDO, NA, NULL, ID_PROYECTO, EL ID, NOMBRE ESPECIFICO].
+3. ENFOQUE EN INFRAESTRUCTURA: Extrae para la durabilidad. No adivines. No "resumas" - MODELA los datos.
+4. OBLIGACIÓN DE DOBLE COMILLA: La salida DEBE ser un único objeto JSON. Todas las claves y valores deben estar entre comillas dobles.
 </governance_rules>
 
 <chain_of_thought_analysis>
-Identify the target PID: {pid}.
-Step 1: Locate the project anchor in the text.
-Step 2: Isolate the surrounding cell structure to separate metadata headers from actual values.
-Step 3: Verify the 'Promovente' has a legal structure (S.A. de C.V., C.P., etc.) or clear personal name.
-Step 4: Cross-reference the Estado code from {pid} (first 2 digits) with the text extracted.
-Step 5: Synthesize a high-fidelity Insight based on the project's scale and sector.
+Identifica el PID objetivo: {pid}.
+Paso 1: Localiza el ancla del proyecto en el texto.
+Paso 2: Aísla la estructura de celdas circundante para separar los encabezados de metadatos de los valores reales.
+Paso 3: Verifica que el 'Promovente' tenga una estructura legal (S.A. de C.V., C.P., etc.) o un nombre personal claro.
+Paso 4: Comprueba el código del Estado desde {pid} (primeros 2 dígitos) con el texto extraído.
+Paso 5: Sintetiza un Insight de alta fidelidad basado en la escala y sector del proyecto.
 </chain_of_thought_analysis>
 
 <location_context_snippet>
@@ -541,8 +541,8 @@ Step 5: Synthesize a high-fidelity Insight based on the project's scale and sect
 {context}
 </full_text_context>
 
-OUTPUT REQUIREMENT:
-Generate a detailed <razonamiento> block followed by a clean <output_json> block containing only the JSON.
+REQUERIMIENTO DE SALIDA:
+Genera un bloque detallado de <razonamiento> seguido de un bloque limpio <output_json> que contenga solo el JSON.
 """
 # ─────────────────────────────────────────────────────────
 # THERMAL MONITOR
@@ -1103,56 +1103,7 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
 
 
 # Prompt Maestro optimizado bajo el estándar UDP (Universal Developer Prompt) del Codex Gemini 3
-DEFAULT_EXTRACTION_PROMPT = """
-<role_persona>
-Actúa como un Líder Principal de Inteligencia de Esoteria especializado en forense ambiental mexicano.
-Tu misión es estructurar datos caóticos y ruidosos de gacetas oficiales en inteligencia de alta fidelidad.
-</role_persona>
-
-<context>
-ID_PROYECTO: {pid}
-FRAGMENTO_UBICACION: {location_snippet}
-TEXTO_BRUTO_PDF:
-{context}
-</context>
-
-<constraints>
-1. NUNCA alucines entidades geográficas. Usa estándares de INEGI.
-2. Si 'EL ID' o 'ID_PROYECTO' aparecen cerca de locaciones, son ruido de metadatos. RECHÁZALOS.
-3. El campo 'INSIGHT' DEBE comenzar con un verbo de acción (Construcción, Operación, etc.) y especificar 2-3 parámetros técnicos.
-4. Si el contexto es insuficiente, marca 'grounded': false.
-5. TODA LA SALIDA (razonamiento e insight) DEBE ESTAR EN ESPAÑOL.
-</constraints>
-
-<task_goal>
-Realiza una extracción forense de los detalles del proyecto.
-Sigue el razonamiento paso a paso antes de generar el JSON final.
-</task_goal>
-
-<output_format>
-Formatea tu respuesta exactamente como:
-<razonamiento>
-[Paso 1: Identificación de ruido]
-[Paso 2: Geo-validación con INEGI]
-[Paso 3: Síntesis de parámetros técnicos]
-</razonamiento>
-
-<output_json>
-{{
-  "estado": "STRING",
-  "municipio": "STRING",
-  "localidad": "STRING",
-  "proyecto": "STRING",
-  "promovente": "STRING",
-  "sector": "STRING",
-  "insight": "STRING",
-  "coordenadas": "STRING",
-  "poligono": "STRING",
-  "grounded": "BOOLEAN"
-}}
-</output_json>
-</output_format>
-"""
+# DEFAULT_EXTRACTION_PROMPT removido por redundancia (definido al inicio en español)
 
 def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
     """

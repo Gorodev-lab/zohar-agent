@@ -433,7 +433,7 @@
 
             <div style="text-align:right">
                 <div style="font-size:10px;color:var(--fg-dim);letter-spacing:.1em">TEMP CPU</div>
-                <div style="font-size:13px;font-weight:700;color:var(--amber)" x-text="status.cpu_temp || 'N/A'"></div>
+                <div style="font-size:13px;font-weight:700;color:var(--amber)" x-text="status.cpu_temp || 'N/D'"></div>
             </div>
         </div>
     </div>
@@ -727,7 +727,7 @@
                                 <td class="td-id">
                                     <div style="display:flex; align-items:center; gap:6px">
                                         <span x-text="p.ID_PROYECTO"></span>
-                                        <span class="audit-tag" :class="'status-' + (p.audit_status || 'pending')" x-text="p.audit_status || 'pending'"></span>
+                                        <span class="audit-tag" :class="'status-' + (p.audit_status || 'pending')" x-text="p.audit_status === 'pending' ? 'pendiente' : (p.audit_status === 'audited' ? 'auditado' : (p.audit_status === 'rejected' ? 'rechazado' : (p.audit_status === 'cloud' ? 'nube' : p.audit_status)))"></span>
                                     </div>
                                     <div class="score-bar" :title="'Nivel de Confianza: ' + p.confidence_score">
                                         <div class="score-fill" :style="'width:' + (p.confidence_score || 0) + '%; background:' + (p.confidence_score > 90 ? 'var(--green)' : p.confidence_score > 80 ? 'var(--cyan)' : 'var(--amber)')"></div>
@@ -749,10 +749,10 @@
                                     <div style="display:flex; align-items:center; gap:6px">
                                         <div style="font-weight:600;color:var(--white)" x-text="p.PROMOVENTE"></div>
                                         <template x-if="p.REPUTATION === 'TRUSTED'">
-                                            <span style="font-size:9px; background:var(--green-dim); color:var(--green); padding:2px 4px; border-radius:4px; border:1px solid var(--green)">✓ TRUSTED</span>
+                                            <span style="font-size:9px; background:var(--green-dim); color:var(--green); padding:2px 4px; border-radius:4px; border:1px solid var(--green)">✓ CONFIABLE</span>
                                         </template>
                                         <template x-if="p.REPUTATION === 'RISKY'">
-                                            <span style="font-size:9px; background:var(--red-dim); color:var(--red); padding:2px 4px; border-radius:4px; border:1px solid var(--red)">⚠ RISKY</span>
+                                            <span style="font-size:9px; background:var(--red-dim); color:var(--red); padding:2px 4px; border-radius:4px; border:1px solid var(--red)">⚠ RIESGOSO</span>
                                         </template>
                                     </div>
                                     <div style="font-size:10px;color:var(--fg-dim);margin-top:2px" x-text="p.PROYECTO"></div>
@@ -775,8 +775,8 @@
                 </table>
             </div>
             <div class="tbl-footer">
-                <span>zohar-core-engine v2.2 // computo-optimizado</span>
-                <span x-text="new Date().toLocaleTimeString()"></span>
+                <span>zohar-core-engine v2.2 // cómputo-optimizado</span>
+                <span x-text="new Date().toLocaleTimeString('es-MX')"></span>
             </div>
         </div>
 

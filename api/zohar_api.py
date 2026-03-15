@@ -53,10 +53,10 @@ async def get_status():
     
     return {
         "cpu_temp": temp,
-        "llama_status": "Online" if llama_ok else "Offline",
+        "llama_status": "En línea" if llama_ok else "Fuera de línea",
         "agent_running": agent_running,
         "llama_ok": llama_ok,
-        "mode": "hybrid-local"
+        "mode": "híbrido-local"
     }
 
 @app.get("/api/projects")
@@ -128,8 +128,8 @@ async def get_diagnostics():
     return {
         "ts": datetime.datetime.now().isoformat(),
         "services": {
-            "llama": {"status": "online" if llama_ok else "offline", "running": True},
-            "ocr": {"status": "online" if ocr_ok else "offline", "running": True},
+            "llama": {"status": "en línea" if llama_ok else "fuera de línea", "running": True},
+            "ocr": {"status": "en línea" if ocr_ok else "fuera de línea", "running": True},
             "agent": {"running": agent_alive, "pid_file": os.path.exists("/tmp/zohar_agent_v2.pid")}
         },
         "csv": {"rows": csv_rows, "size_kb": csv_size},
