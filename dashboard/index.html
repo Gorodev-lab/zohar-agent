@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zohar Intelligence :: Operations Center</title>
+    <title>Zohar Intelligence :: Centro de Operaciones</title>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -802,14 +802,14 @@
             <div class="drawer-label">Activos de Verificación</div>
             <div style="margin-top: 8px;">
                 <template x-for="f in (typeof selectedProject?.FUENTES === 'string' ? JSON.parse(selectedProject?.FUENTES || '[]') : (selectedProject?.FUENTES || []))">
-                    <a :href="f" target="_blank" class="audit-btn" style="display: block; margin-bottom: 4px; text-decoration: none; text-align: center;">Verified Source (Web)</a>
+                    <a :href="f" target="_blank" class="audit-btn" style="display: block; margin-bottom: 4px; text-decoration: none; text-align: center;">Fuente Verificada (Web)</a>
                 </template>
             </div>
 
             <div class="drawer-label">Audit Control</div>
             <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button class="btn btn-start" style="flex: 1" @click="auditProject(selectedProject.ID_PROYECTO, 'audited'); selectedProject = null">Approve Intel</button>
-                <button class="btn btn-stop" style="flex: 1" @click="auditProject(selectedProject.ID_PROYECTO, 'rejected'); selectedProject = null">Flag Anomaly</button>
+                <button class="btn btn-start" style="flex: 1" @click="auditProject(selectedProject.ID_PROYECTO, 'audited'); selectedProject = null">Aprobar Inteligencia</button>
+                <button class="btn btn-stop" style="flex: 1" @click="auditProject(selectedProject.ID_PROYECTO, 'rejected'); selectedProject = null">Reportar Anomalía</button>
             </div>
         </div>
     </div>
