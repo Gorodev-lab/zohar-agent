@@ -228,6 +228,23 @@ def load_audited_data():
             })
     except: return pd.DataFrame()
 
+def is_valid_record(project: str, promovente: str, source: str) -> bool:
+    """
+    Filtro de integridad Cero Alucinaciones para validación de registros.
+    """
+    if len(project) < 5 or len(promovente) < 4:
+        return False
+    
+    forbidden = ["DESCONOCIDO", "ID_PROYECTO", "EL ID", "NOMBRE ESPECIFICO", "PROYECTO DE INVERSIÓN"]
+    for word in forbidden:
+        if word in project.upper() or word in promovente.upper():
+            return False
+            
+    if not source or source == "no-link" or not source.startswith("http"):
+        return False
+        
+    return True
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8081)

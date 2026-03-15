@@ -1,287 +1,270 @@
 # ESOTERIA
 
-## Intelligence Infrastructure
+## Infraestructura de Inteligencia
 
-### Organizational Restructure Doctrine (Internal v1)
-
-------------------------------------------------------------------------
-
-# I. Purpose of This Document
-
-This document defines the structural realignment of Esoteria.
-
-It clarifies:
-
--   Institutional identity\
--   Core mission\
--   Architectural focus\
--   Product hierarchy\
--   Revenue structure\
--   Strategic sequencing\
--   Brand positioning
-
-This is an internal doctrine document.\
-All derivative materials must align with the principles established
-here.
+### Doctrina de Reestructuración Organizacional (Interna v1)
 
 ------------------------------------------------------------------------
 
-# II. Institutional Identity
+# I. Propósito de este Documento
 
-Esoteria is an **intelligence infrastructure institution**.
+Este documento define el realineamiento estructural de Esoteria.
 
-We are not:
+Clarifica:
 
--   An AI consultancy\
--   A generic SaaS company\
--   A development agency\
--   A nonprofit organization
+-   Identidad institucional\
+-   Misión central\
+-   Enfoque arquitectónico\
+-   Jerarquía de productos\
+-   Estructura de ingresos\
+-   Secuenciación estratégica\
+-   Posicionamiento de marca
 
-We design and deploy structured intelligence systems for civic
-institutions and mission-driven organizations.
-
-Artificial intelligence is an embedded capability within our systems,
-but it is not the defining feature of our identity.
-
-Our defining feature is structure.
+Este es un documento de doctrina interna.\
+Todos los materiales derivados deben alinearse con los principios establecidos aquí.
 
 ------------------------------------------------------------------------
 
-# III. Foundational Philosophy
+# II. Identidad Institucional
 
-Organizations and civic systems do not primarily suffer from lack of
-information.
+Esoteria es una **institución de infraestructura de inteligencia**.
 
-They suffer from:
+No somos:
 
--   Fragmentation\
--   Implicit decision logic\
--   Person-dependent processes\
--   Unstructured data accumulation\
--   Governance gaps
+-   Una consultoría de IA\
+-   Una empresa de SaaS genérica\
+-   Una agencia de desarrollo\
+-   Una organización sin fines de lucro
 
-Esoteria builds the structural layer that converts fragmented data into
-governed intelligence.
+Diseñamos y desplegamos sistemas de inteligencia estructurada para instituciones cívicas y organizaciones impulsadas por una misión.
 
-Structure precedes acceleration.\
-Modeling precedes automation.\
-Intelligence precedes tooling.
+La inteligencia artificial es una capacidad embebida dentro de nuestros sistemas, pero no es la característica definitoria de nuestra identidad.
+
+Nuestra característica definitoria es la estructura.
 
 ------------------------------------------------------------------------
 
-# IV. Core Institutional Mandate
+# III. Filosofía Fundacional
 
-Esoteria exists to:
+Las organizaciones y los sistemas cívicos no sufren primordialmente por falta de información.
 
-1.  Build civic intelligence infrastructure that strengthens
-    public-interest systems.
-2.  Formalize decision logic for mission-driven organizations.
-3.  Deploy governed intelligence systems before automation is
-    introduced.
-4.  Demonstrate these principles through working public infrastructure.
+Sufren de:
 
-Our long-term institutional positioning is that of a civic intelligence
-entity that also serves mission-driven organizations.
+-   Fragmentación\
+-   Lógica de decisión implícita\
+-   Procesos dependientes de personas\
+-   Acumulación de datos no estructurados\
+-   Brechas de gobernanza
 
-------------------------------------------------------------------------
+Esoteria construye la capa estructural que convierte los datos fragmentados en inteligencia gobernada.
 
-# V. Structural Divisions
-
-Esoteria operates through two primary divisions.
+La estructura precede a la aceleración.\
+El modelado precede a la automatización.\
+La inteligencia precede a las herramientas.
 
 ------------------------------------------------------------------------
 
-## Division I --- Civic Intelligence
+# IV. Mandato Institucional Central
 
-This division represents the institutional core of Esoteria.
+Esoteria existe para:
 
-Its purpose is to:
+1.  Construir infraestructura de inteligencia cívica que fortalezca los sistemas de interés público.
+2.  Formalizar la lógica de decisión para organizaciones impulsadas por una misión.
+3.  Desplegar sistemas de inteligencia gobernada antes de introducir la automatización.
+4.  Demostrar estos principios a través de infraestructura pública funcional.
 
--   Ingest civic data\
--   Structure public-interest datasets\
--   Model patterns and correlations\
--   Produce repeatable intelligence outputs\
--   Support research and accountability
-
-### Flagship Platform: Denuncia Popular
-
-Denuncia Popular functions as:
-
--   A civic reporting ingestion layer\
--   A privacy-first public interface\
--   A structured event generator\
--   A dataset builder for civic intelligence
-
-Denuncia Popular is a wholly owned Esoteria product.
-
-It demonstrates:
-
--   Structured intake\
--   Schema discipline\
--   Privacy-first design\
--   Governed intelligence layering
-
-Future deployments may include:
-
--   White-label instances for aligned NGOs\
--   Institutional dashboards\
--   Civic intelligence briefs\
--   Regional analytical reports
-
-All expansions must preserve architectural consistency.
+Nuestro posicionamiento institucional a largo plazo es el de una entidad de inteligencia cívica que también sirve a organizaciones impulsadas por una misión.
 
 ------------------------------------------------------------------------
 
-## Division II --- Governance Systems
+# V. Divisiones Estructurales
 
-This division represents the institutional services arm.
-
-Its purpose is to:
-
--   Convert implicit organizational processes into explicit decision
-    systems\
--   Define signal models\
--   Build scoring logic\
--   Establish tier thresholds\
--   Create repeatable prioritization frameworks\
--   Prepare organizations for responsible automation
-
-Engagements in this division must follow structured sequencing:
-
-1.  Structural clarification\
-2.  Signal definition\
-3.  Scoring logic articulation\
-4.  Manual validation cycle\
-5.  Governance validation\
-6.  Optional acceleration
-
-AI may be introduced only after structural clarity exists.
-
-This division funds and strengthens the civic intelligence mandate.
+Esoteria opera a través de dos divisiones primarias.
 
 ------------------------------------------------------------------------
 
-# VI. AI Positioning
+## División I — Inteligencia Cívica
 
-AI is embedded within Esoteria systems for:
+Esta división representa el núcleo institucional de Esoteria.
 
--   Classification\
--   Clustering\
--   Enrichment\
--   Pattern detection\
--   Acceleration
+Su propósito es:
 
-AI is not:
+-   Ingerir datos cívicos\
+-   Estructurar conjuntos de datos de interés público\
+-   Modelar patrones y correlaciones\
+-   Producir resultados de inteligencia repetibles\
+-   Apoyar la investigación y la rendición de cuentas
 
--   The product\
--   The headline\
--   The institutional identity
+### Plataforma Insignia: Denuncia Popular
 
-AI operates inside governed infrastructure.
+Denuncia Popular funciona como:
 
-Intelligence infrastructure defines the system.\
-AI enhances it.
+-   Una capa de ingesta de denuncias cívicas\
+-   Una interfaz pública donde la privacidad es prioridad\
+-   Un generador de eventos estructurados\
+-   Un constructor de conjuntos de datos para la inteligencia cívica
 
-------------------------------------------------------------------------
+Denuncia Popular es un producto de propiedad total de Esoteria.
 
-# VII. Product & Platform Hierarchy
+Demuestra:
 
-The Esoteria ecosystem follows this hierarchy:
+-   Ingesta estructurada\
+-   Disciplina de esquema\
+-   Diseño centrado en la privacidad\
+-   Capa de inteligencia gobernada
 
-Layer 1 --- Governance Doctrine\
-Layer 2 --- Intelligence Infrastructure Architecture\
-Layer 3 --- Civic Intelligence Engine\
-Layer 4 --- Denuncia Popular (Public Ingestion Layer)\
-Layer 5 --- Governance Deployments (Client Engagements)
+Los despliegues futuros pueden incluir:
 
-White-label deployments must adhere to shared schema and infrastructure
-discipline.
+-   Instancias de marca blanca para ONGs alineadas\
+-   Tableros institucionales\
+-   Resúmenes de inteligencia cívica\
+-   Informes analíticos regionales
 
-Custom development without architectural alignment is prohibited.
-
-------------------------------------------------------------------------
-
-# VIII. Revenue Architecture
-
-Revenue is generated through:
-
-1.  Governance system engagements\
-2.  Infrastructure deployment for institutions\
-3.  White-label civic platform licensing\
-4.  Advisory retainers tied to structured intelligence outputs
-
-Denuncia Popular remains:
-
--   Free at point of use\
--   Donation supported\
--   Impact-driven
-
-Revenue expansion must not compromise structural integrity or public
-trust.
+Todas las expansiones deben preservar la consistencia arquitectónica.
 
 ------------------------------------------------------------------------
 
-# IX. Brand Realignment
+## División II — Sistemas de Gobernanza
 
-The public brand shall reflect:
+Esta división representa el brazo de servicios institucionales.
+
+Su propósito es:
+
+-   Convertir procesos organizacionales implícitos en sistemas de decisión explícitos\
+-   Definir modelos de señales\
+-   Construir lógica de puntuación\
+-   Establecer umbrales de niveles\
+-   Crear marcos de priorización repetibles\
+-   Preparar a las organizaciones para una automatización responsable
+
+Los compromisos en esta división deben seguir una secuenciación estructurada:
+
+1.  Clarificación estructural\
+2.  Definición de señales\
+3.  Articulación de la lógica de puntuación\
+4.  Ciclo de validación manual\
+5.  Validación de gobernanza\
+6.  Aceleración opcional
+
+La IA puede introducirse solo después de que exista claridad estructural.
+
+Esta división financia y fortalece el mandato de inteligencia cívica.
+
+------------------------------------------------------------------------
+
+# VI. Posicionamiento de la IA
+
+La IA está embebida en los sistemas de Esoteria para:
+
+-   Clasificación\
+-   Agrupamiento (Clustering)\
+-   Enriquecimiento\
+-   Detección de patrones\
+-   Aceleración
+
+La IA no es:
+
+-   El producto\
+-   El titular\
+-   La identidad institucional
+
+La IA opera dentro de una infraestructura gobernada.
+
+La infraestructura de inteligencia define el sistema.\
+La IA lo mejora.
+
+------------------------------------------------------------------------
+
+# VII. Jerarquía de Productos y Plataformas
+
+El ecosistema de Esoteria sigue esta jerarquía:
+
+Capa 1 — Doctrina de Gobernanza\
+Capa 2 — Arquitectura de Infraestructura de Inteligencia\
+Capa 3 — Motor de Inteligencia Cívica\
+Capa 4 — Denuncia Popular (Capa de Ingesta Pública)\
+Capa 5 — Despliegues de Gobernanza (Compromisos con Clientes)
+
+Los despliegues de marca blanca deben adherirse al esquema compartido y a la disciplina de infraestructura.
+
+El desarrollo personalizado sin alineación arquitectónica está prohibido.
+
+------------------------------------------------------------------------
+
+# VIII. Arquitectura de Ingresos
+
+Los ingresos se generan a través de:
+
+1.  Compromisos de sistemas de gobernanza\
+2.  Despliegue de infraestructura para instituciones\
+3.  Licenciamiento de plataforma cívica de marca blanca\
+4.  Retainers de asesoría vinculados a resultados de inteligencia estructurada
+
+Denuncia Popular permanece:
+
+-   Gratis en el punto de uso\
+-   Apoyado por donaciones\
+-   Impulsado por el impacto
+
+La expansión de los ingresos no debe comprometer la integridad estructural ni la confianza pública.
+
+------------------------------------------------------------------------
+
+# IX. Realineamiento de Marca
+
+La marca pública reflejará:
 
 Esoteria\
-Intelligence Infrastructure
+Infraestructura de Inteligencia
 
-"AI" may remain in the legal entity name and domain, but it will not
-define visible brand positioning.
+"AI" puede permanecer en el nombre de la entidad legal y en el dominio, pero no definirá el posicionamiento visible de la marca.
 
-Public messaging must:
+La mensajería pública debe:
 
--   Emphasize structure\
--   Emphasize systems\
--   Emphasize institutional durability\
--   Avoid hype language\
--   Avoid automation-first framing
+-   Enfatizar la estructura\
+-   Enfatizar los sistemas\
+-   Enfatizar la durabilidad institucional\
+-   Evitar el lenguaje de "hype"\
+-   Evitar el enfoque de automatización primero
 
-We are infrastructure builders, not automation vendors.
-
-------------------------------------------------------------------------
-
-# X. Strategic Focus (Near-Term)
-
-Esoteria will focus on:
-
-1.  Maturing Denuncia Popular as a stable civic ingestion layer.
-2.  Formalizing Civic Intelligence outputs (briefs, clustering,
-    reporting).
-3.  Deploying Governance Systems engagements selectively.
-4.  Aligning brand and documentation under the Intelligence
-    Infrastructure identity.
-
-Projects not aligned with these objectives should be deprioritized.
-
-Narrative convergence is essential for institutional clarity.
+Somos constructores de infraestructura, no vendedores de automatización.
 
 ------------------------------------------------------------------------
 
-# XI. Institutional Trajectory (3-Year Horizon)
+# X. Enfoque Estratégico (Corto Plazo)
 
-Within three years, Esoteria aims to:
+Esoteria se centrará en:
 
--   Establish Denuncia Popular as a trusted civic reporting platform in
-    its pilot region.
--   Publish recurring civic intelligence briefs.
--   Deploy multiple white-label civic instances.
--   Maintain structured governance engagements with mission-driven
-    organizations.
--   Be recognized as an intelligence infrastructure institution, not an
-    AI vendor.
+1.  Madurar Denuncia Popular como una capa de ingesta cívica estable.
+2.  Formalizar los productos de Inteligencia Cívica (resúmenes, clustering, informes).
+3.  Desplegar compromisos de Sistemas de Gobernanza selectivamente.
+4.  Alinear la marca y la documentación bajo la identidad de Infraestructura de Inteligencia.
+
+Los proyectos no alineados con estos objetivos deben ser despriorizados.
+
+La convergencia narrativa es esencial para la claridad institucional.
 
 ------------------------------------------------------------------------
 
-# XII. Closing Statement
+# XI. Trayectoria Institucional (Horizonte de 3 Años)
 
-Esoteria is building intelligence infrastructure.
+Dentro de tres años, Esoteria aspira a:
 
-We formalize structure before acceleration.\
-We govern data before automation.\
-We convert fragmentation into modeled systems.
+-   Establecer Denuncia Popular como una plataforma de denuncias cívicas confiable en su región piloto.
+-   Publicar resúmenes recurrentes de inteligencia cívica.
+-   Desplegar múltiples instancias cívicas de marca blanca.
+-   Mantener compromisos de gobernanza estructurada con organizaciones impulsadas por una misión.
+-   Ser reconocida como una institución de infraestructura de inteligencia, no como un vendedor de IA.
 
-Our institutional future rests not on tools,\
-but on durable architecture.
+------------------------------------------------------------------------
+
+# XII. Declaración de Cierre
+
+Esoteria está construyendo infraestructura de inteligencia.
+
+Formalizamos la estructura antes de la aceleración.\
+Gobernamos los datos antes de la automatización.\
+Convertimos la fragmentación en sistemas modelados.
+
+Nuestro futuro institucional no descansa en las herramientas,\
+sino en una arquitectura duradera.
