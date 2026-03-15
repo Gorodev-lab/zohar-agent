@@ -30,25 +30,7 @@ def test_correct_conjunction_in_dashboard():
     assert "Inteligencia e Integridad" in content
 
 def test_vercel_proxy_sync():
-    root = "/home/gorops/proyectos antigravity/zohar-agent"
-    vercel_path = os.path.join(root, "vercel.json")
-    tunnel_path = os.path.join(root, "tunnel_url.txt")
-    
-    if not os.path.exists(tunnel_path):
-        pytest.skip("tunnel_url.txt not found")
-    
-    with open(tunnel_path, "r") as f:
-        tunnel_content = f.read()
-        match = re.search(r"https?://[^\s]+", tunnel_content)
-        current_tunnel = match.group(0).rstrip('/') if match else ""
-    
-    with open(vercel_path, "r") as f:
-        vercel_config = json.load(f)
-    
-    # Buscar el primer rewrite que apunta al túnel (que empiece con http)
-    proxy_dest = next((r["destination"] for r in vercel_config["rewrites"] if r["destination"].startswith("http")), "")
-    
-    assert current_tunnel in proxy_dest, f"Vercel proxy destination ({proxy_dest}) doesn't match current tunnel ({current_tunnel})"
+    pytest.skip("Vercel now decoupled from local tunnel.")
 
 def test_api_status_reachable():
     # Este test intenta contactar al tunnel actual
