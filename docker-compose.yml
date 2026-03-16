@@ -12,7 +12,8 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    command: uvicorn api.zohar_api:app --host 0.0.0.0 --port 8081
+    # API principal (FastAPI) expuesta en el puerto 8081
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8081
 
   zohar-agent:
     build: .

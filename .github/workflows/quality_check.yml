@@ -10,6 +10,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Mantener tiempos bajos de CI reproduciendo el entorno local mínimo
+    strategy:
+      fail-fast: false
+
     services:
       # Podríamos simular Supabase o Redis aquí si fuera necesario
       pass:
@@ -17,12 +21,16 @@ jobs:
         ports: ["8081:8081"]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        # Cache automático de pip para acelerar runs repetidas
+        cache: 'pip'
+        cache-dependency-path: |
+          requirements.txt
 
     - name: Install System Dependencies
       run: |
