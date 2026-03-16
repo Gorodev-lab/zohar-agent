@@ -108,7 +108,7 @@ CONFIG: dict[str, Any] = {
 
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,
-    "YEARS":             [2026, 2025, 2024],
+    "YEARS":             [2026, 2025],
     "DRY_RUN":           False,
     "DAEMON_MODE":       False,
 }
@@ -1102,18 +1102,17 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
         return None
 
 
-# Prompt Maestro optimizado bajo el estándar UDP (Universal Developer Prompt) del Codex Gemini 3
-# DEFAULT_EXTRACTION_PROMPT removido por redundancia (definido al inicio en español)
-
+# ── PIPELINE DE EXTRACCIÓN (DOCTORAL) ─────────────────────
 def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
     """
     Pipeline de extracción híbrido.
-    1. Intenta Gemini (Élite + Grounding).
-    2. Si falla, cae a Mistral Local (Prompt Chaining).
+    1. Intenta Gemini (Élite + Grounding por Chunks).
+    2. Si falla, cae a Mistral Local (estándar Doctoral).
     """
 
     # ── INTENTO ÉLITE: Gemini + Grounding ────────────────────────────────
     if gemini_client:
+        log.info(f"    ✨ Intentando extracción Élite (Gemini + Grounding) para {pid}")
         extracted = extract_with_gemini(pid, context, log)
         if extracted:
             return extracted
@@ -1121,26 +1120,28 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str =
     # ── FALLBACK: Mistral Local (PASO 1 + PASO 2) ────────────────────────
     log.info(f"    🔄 Falling back to Local Inference (Mistral) for {pid}")
     
-
     # Cargar prompts dinámicamente
     loc_finder_template = prompts.get_prompt("location_finder", DEFAULT_LOC_FINDER) if prompts else DEFAULT_LOC_FINDER
-    ext_template = prompts.get_prompt("extraction_v2", DEFAULT_EXTRACTION_PROMPT) if prompts else DEFAULT_EXTRACTION_PROMPT
+    ext_template = prompts.get_prompt("extraction_v2", "") 
+    if not ext_template:
+        log.error("    ❌ Fallo crítico: no se encontró el prompt de extracción doctoral.")
+        return None
 
-    # ── PASO 1: Location Finder ──────────────────────────────────────────
+    # ── PASO 1: Location Finder (Desambiguación Preliminar) ─────────────
     loc_prompt = loc_finder_template.format(pid=pid, context=context)
     location_snippet = _llm_call(
         messages=[{"role": "user", "content": loc_prompt}],
-        max_tokens=300,
+        max_tokens=400,
         log=log,
     ) or "NO_HALLADO"
 
-    log.debug(f"    [Loc-Finder] {pid}: {location_snippet[:80]!r}")
+    log.debug(f"    [Loc-Finder] Fragmento: {location_snippet[:100]!r}...")
 
-    # ── PASO 2: Extracción estructurada ──────────────────────────────────
+    # ── PASO 2: Extracción Doctoral con CoT ─────────────────────────────
     ext_prompt = ext_template.format(
-        pid=pid,                      # Agregamos pid que faltaba en el .format() previo
+        pid=pid,
         location_snippet=location_snippet,
-        context=context,
+        context=context[:CONFIG["CONTEXT_CHARS"]],
     )
 
     for attempt in range(1, CONFIG["MAX_RETRIES"] + 1):
@@ -1148,16 +1149,11 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str =
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "Act as an Esoteria Senior Intelligence Lead. Your mission is to convert "
-                        "fragmented gubernamental data into governed, grounded intelligence. "
-                        "Responde SIEMPRE con un bloque <razonamiento> seguido de <output_json>."
-                    ),
+                    "content": "Eres un Arquitecto de Inteligencia de Esoteria. Tu salida DEBE ser un bloque <razonamiento> y un bloque <output_json>."
                 },
                 {"role": "user", "content": ext_prompt},
             ],
             max_tokens=CONFIG["MAX_TOKENS"],
-            stop=["</output_json>"],
             log=log,
         )
 

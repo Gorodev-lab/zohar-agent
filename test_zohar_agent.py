@@ -31,6 +31,10 @@ Z.supabase_client = None
 logger = logging.getLogger("test_zohar")
 logger.addHandler(logging.NullHandler())
 
+# Inicializar managers para tests
+Z.prompts = Z.PromptManager(Path(__file__).resolve().parent / "agent" / "prompts")
+Z.CONFIG["PROMPTS_DIR"] = Path(__file__).resolve().parent / "agent" / "prompts"
+
 # ═══════════════════════════════════════════════════════════════════
 # FIXTURES
 # ═══════════════════════════════════════════════════════════════════
@@ -428,6 +432,30 @@ class TestExtractWithAI:
             with patch("zohar_agent_v2._llm_call", return_value=bad_response):
                 result = Z.extract_with_ai("23QR2025TD001", "CONTEXTO", logger)
         assert result is None
+
+    def test_doctoral_challenge_extreme_noise(self):
+        """Prueba de fuego: 'EL ID' inyectado en todos los campos de ubicación."""
+        noise_response = """
+<razonamiento>
+El texto está muy roto. Adyacente a MUNICIPIO leo 'EL ID', que descarto por ser un encabezado. 
+Buscando más adelante en el contexto de la obra, encuentro que se ubica en 'Cozumel'.
+</razonamiento>
+<output_json>
+{
+  "PROMOVENTE": "FERRY DEL CARIBE",
+  "PROYECTO": "TERMINAL MARITIMA",
+  "ESTADO": "QUINTANA ROO",
+  "MUNICIPIO": "COZUMEL",
+  "DESCRIPCION": "Construcción de una terminal marítima."
+}
+</output_json>"""
+        Z.CONFIG["MAX_RETRIES"] = 1
+        with patch("zohar_agent_v2._llm_call", return_value=noise_response):
+            result = Z.extract_with_ai("23QR2025TD001", "RUIDO EXTREMO EL ID MUNICIPIO EL ID PROYECTO...", logger)
+        
+        assert result is not None
+        assert result["municipio"].upper() == "COZUMEL"
+        assert "EL ID" not in result["municipio"].upper()
 
 
 # ═══════════════════════════════════════════════════════════════════
