@@ -727,6 +727,9 @@
                                 <td class="td-id">
                                     <div style="display:flex; align-items:center; gap:6px">
                                         <span x-text="p.ID_PROYECTO"></span>
+                                        <template x-if="p.grounded || p.SOURCES">
+                                            <span class="tag-grounded">GROUNDED</span>
+                                        </template>
                                         <span class="audit-tag" :class="'status-' + (p.audit_status || 'pending')" x-text="p.audit_status === 'pending' ? 'pendiente' : (p.audit_status === 'audited' ? 'auditado' : (p.audit_status === 'rejected' ? 'rechazado' : (p.audit_status === 'cloud' ? 'nube' : p.audit_status)))"></span>
                                     </div>
                                     <div class="score-bar" :title="'Nivel de Confianza: ' + p.confidence_score">
