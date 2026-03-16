@@ -11,6 +11,19 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+ENV_PATH = Path(__file__).parent.parent / ".env"
+load_dotenv(ENV_PATH)
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+supabase_client: Client = None
+if SUPABASE_URL and SUPABASE_KEY:
+    supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI(title="Zohar Intelligence API")
 
@@ -196,8 +209,40 @@ async def post_audit(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/cloud-projects")
-async def get_cloud_projects_local():
-    return await get_projects()
+async def get_cloud_projects():
+    if not supabase_client:
+        return await get_projects()
+    
+    try:
+        # Consultar la tabla 'proyectos' de Supabase
+        response = supabase_client.table("proyectos").select("*").order("anio", desc=True).limit(500).execute()
+        data = response.data
+        
+        # Mapear nombres de columnas de Supabase a los esperados por el Dashboard
+        mapped_data = []
+        for row in data:
+            mapped_row = {
+                "ID_PROYECTO": row.get("id_proyecto"),
+                "ANIO": row.get("anio"),
+                "ESTADO": row.get("estado"),
+                "MUNICIPIO": row.get("municipio"),
+                "LOCALIDAD": row.get("localidad"),
+                "PROYECTO": row.get("proyecto"),
+                "PROMOVENTE": row.get("promovente"),
+                "SECTOR": row.get("sector"),
+                "INSIGHT": row.get("insight"),
+                "COORDENADAS": row.get("coordenadas"),
+                "POLIGONO": row.get("poligono"),
+                "audit_status": row.get("audit_status", "cloud"),
+                "grounded": True
+            }
+            mapped_data.append(mapped_row)
+            
+        return mapped_data
+    except Exception as e:
+        # Fallback a local si falla la nube
+        print(f"Cloud fetch error: {e}")
+        return await get_projects()
 
 # Helpers
 def _check_service(url: str, timeout: int = 5):
