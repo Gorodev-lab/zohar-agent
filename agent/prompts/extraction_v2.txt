@@ -28,11 +28,13 @@ Para garantizar una extracción de datos de altísima fidelidad, debes interiori
    - Los valores asignados a los campos ESTADO y MUNICIPIO deben existir factual y normativamente en la geografía física mexicana y en el Catálogo de Claves de Entidades Federativas y Municipios del INEGI.  
    - Si extraes "EL" o iniciales aisladas como estado, se considerará un error fatal de procesamiento. Un estado legítimo es "CAMPECHE", "YUCATÁN", "JALISCO", etc.  
    - Validación cruzada interna obligatoria: Pregúntate internamente, ¿El municipio que estoy a punto de extraer realmente pertenece al estado que he extraído? (Ej. Si el estado es Sonora, el municipio no puede ser Cozumel). Si hay una incongruencia, el texto está roto; debes seguir buscando en el contexto más amplio la alineación geográfica correcta.
+   - Si NO encuentras un municipio claro y explícito en el texto, es preferible dejar el campo MUNICIPIO vacío ("") antes que inventar un nombre municipal o reciclar encabezados como "EL ID".
 
 3. INGENIERÍA Y SÍNTESIS DE LA DESCRIPCIÓN MEDIANTE VERBOS DE ACCIÓN (ABSTRACTIVE SUMMARIZATION):  
    - El campo DESCRIPCION no puede ser bajo ninguna circunstancia simplemente una reiteración perezosa del nombre del proyecto. Está estrictamente prohibido que quede vacío o se complete con un guion ("—").  
    - DEBE comenzar siempre y de manera obligatoria con un sustantivo o gerundio derivado de un verbo de acción técnica e ingenieril (Ej: "Construcción...", "Operación y mantenimiento de...", "Ampliación de la infraestructura de...", "Instalación de...", "Aprovechamiento forestal sustentable para...").  
    - Tienes el mandato de leer profundamente los párrafos adyacentes al título para extraer detalles y parámetros técnicos valiosos (superficie de afectación en hectáreas, tipo específico de infraestructura, capacidad operativa de las plantas, voltajes, etc.) y sintetizar todo este conocimiento en un bloque narrativo conciso de 2 a 3 oraciones completas.  
+   - Nunca inventes estados, municipios o descripciones que no estén soportados explícitamente por el texto fuente; si la información no existe en el texto, deja el campo vacío o utiliza únicamente los datos verificables.
 </extraction_rules>
 
 <contrastive_examples>  
@@ -70,6 +72,18 @@ Para garantizar una extracción de datos de altísima fidelidad, debes interiori
     }}  
     </output_json>  
   </positive_example_correct_extraction>  
+
+  <negative_example_estado_generico>
+    <texto_crudo_simulado>
+    NUMERO 08 EL ID 99XX2026Z0001 ESTADO MEXICO MUNICIPIO EL ID PROYECTO PROYECTO GENERICO PROMOVENTE EMPRESA DEMO DESCRIPCION PROYECTO GENERICO
+    </texto_crudo_simulado>
+    <error_analysis_and_correction>
+    En este ejemplo, el texto sólo contiene la cadena genérica "MEXICO" sin una entidad federativa válida asociada (como "VERACRUZ" o "SONORA") y el supuesto municipio es "EL ID". Debes:
+      - Reconocer que "MEXICO" aislado no es un estado válido según el catálogo INEGI cuando no viene acompañado de una entidad específica.
+      - Dejar el campo ESTADO vacío o conservar únicamente un valor previamente verificado en lugar de inventar un estado.
+      - Dejar el campo MUNICIPIO vacío porque "EL ID" es claramente ruido de encabezado, no un municipio real.
+    </error_analysis_and_correction>
+  </negative_example_estado_generico>
 </contrastive_examples>
 
 <execution_instructions>  

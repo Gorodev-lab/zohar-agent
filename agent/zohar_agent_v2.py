@@ -105,7 +105,8 @@ CONFIG: dict[str, Any] = {
     "TEMP_WARN":         76.0,
     "TEMP_CRIT":         85.0,
     "LLAMA_TIMEOUT":     int(os.environ.get("ZOHAR_LLAMA_TIMEOUT", "300")),
-    "CONTEXT_CHARS":     int(os.environ.get("ZOHAR_CONTEXT_CHARS", "4000")),
+    # Menos contexto para modelos pequeños → menos ruido tabular
+    "CONTEXT_CHARS":     int(os.environ.get("ZOHAR_CONTEXT_CHARS", "2500")),
 
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,
@@ -1117,8 +1118,12 @@ async def _llm_call(messages: list, max_tokens: int, stop: Optional[List[str]] =
         "temperature": CONFIG["TEMPERATURE"],
         "max_tokens":  max_tokens,
     }
+    # Stops recomendados para modelos estilo Mistral/llama.cpp
+    default_stops = ["</output_json>", "</razonamiento>"]
     if stop:
-        payload["stop"] = stop
+        payload["stop"] = stop + default_stops
+    else:
+        payload["stop"] = default_stops
 
     try:
         async with httpx.AsyncClient(timeout=CONFIG["LLAMA_TIMEOUT"]) as client:
@@ -1239,7 +1244,7 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
 
 
 # ── PIPELINE DE EXTRACCIÓN (DOCTORAL) ─────────────────────
-async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
+async def _extract_with_ai_async(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
     """
     Pipeline de extracción híbrido.
     1. Intenta Gemini (Élite + Grounding por Chunks).
@@ -1350,6 +1355,16 @@ async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name:
         time.sleep(2)
 
     return None
+
+
+def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
+    """
+    Wrapper síncrono para compatibilidad con la suite de tests (pytest).
+    Internamente delega al pipeline asíncrono.
+    """
+    import asyncio
+
+    return asyncio.run(_extract_with_ai_async(pid, context, log, pdf_name))
 
 
 
@@ -1587,13 +1602,13 @@ PLACEHOLDER_TERMS = {
 STATE_CODES = {
     "01": "AGUASCALIENTES", "02": "BAJA CALIFORNIA", "03": "BAJA CALIFORNIA SUR",
     "04": "CAMPECHE", "05": "COAHUILA", "06": "COLIMA", "07": "CHIAPAS",
-    "08": "CHIHUAHUA", "09": "CIUDAD DE MEXICO", "10": "DURANGO",
+    "08": "CHIHUAHUA", "09": "CIUDAD DE MÉXICO", "10": "DURANGO",
     "11": "GUANAJUATO", "12": "GUERRERO", "13": "HIDALGO", "14": "JALISCO",
-    "15": "MEXICO", "16": "MICHOACAN", "17": "MORELOS", "18": "NAYARIT",
-    "19": "NUEVO LEON", "20": "OAXACA", "21": "PUEBLA", "22": "QUERETARO",
-    "23": "QUINTANA ROO", "24": "SAN LUIS POTOSI", "25": "SINALOA",
+    "15": "MÉXICO", "16": "MICHOACÁN", "17": "MORELOS", "18": "NAYARIT",
+    "19": "NUEVO LEÓN", "20": "OAXACA", "21": "PUEBLA", "22": "QUERÉTARO",
+    "23": "QUINTANA ROO", "24": "SAN LUIS POTOSÍ", "25": "SINALOA",
     "26": "SONORA", "27": "TABASCO", "28": "TAMAULIPAS", "29": "TLAXCALA",
-    "30": "VERACRUZ", "31": "YUCATAN", "32": "ZACATECAS"
+    "30": "VERACRUZ", "31": "YUCATÁN", "32": "ZACATECAS"
 }
 
 def audit_record(pid: str, d: dict, log: logging.Logger) -> tuple[int, list[str]]:
@@ -1846,7 +1861,7 @@ async def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], st
         return vision, context
 
     # Extracción principal con IA
-    extracted = await extract_with_ai(item.pid, context, log)
+    extracted = await _extract_with_ai_async(item.pid, context, log)
 
     # Fallback Vision OCR
     if not extracted or str(extracted.get("promovente", "")).strip().lower() in PLACEHOLDER_TERMS:
