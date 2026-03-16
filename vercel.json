@@ -3,24 +3,9 @@
   "name": "zohar-agent",
   "cleanUrls": true,
   "trailingSlash": false,
-  "functions": {
-    "dashboard/api/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
+  "framework": "fastapi",
   "rewrites": [
-    { "source": "/api/cloud-projects", "destination": "/dashboard/api/cloud-projects.js" },
-    { "source": "/api/cloud-analytics", "destination": "/dashboard/api/cloud-analytics.js" },
-    { "source": "/api/cloud-status", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/status", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/agent_state", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/projects", "destination": "/dashboard/api/cloud-projects.js" },
-    { "source": "/api/analytics", "destination": "/dashboard/api/cloud-analytics.js" },
-    { "source": "/api/logs", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/control", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/audit", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/diagnostics", "destination": "/dashboard/api/cloud-status.js" },
-    { "source": "/api/:path*", "destination": "/dashboard/api/:path*" },
-    { "source": "/(.*)", "destination": "/dashboard/$1" }
+    { "source": "/api/(.*)", "destination": "api/index.py" },
+    { "source": "/(.*)", "destination": "dashboard/$1" }
   ]
 }
