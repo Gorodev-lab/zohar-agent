@@ -1,11 +1,13 @@
 {
   "version": 2,
-  "name": "zohar-agent",
   "cleanUrls": true,
   "trailingSlash": false,
-  "framework": "fastapi",
+  "builds": [
+    { "src": "index.py", "use": "@vercel/python" },
+    { "src": "dashboard/**", "use": "@vercel/static" }
+  ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "api/index.py" },
+    { "source": "/api/(.*)", "destination": "index.py" },
     { "source": "/(.*)", "destination": "dashboard/$1" }
   ]
 }
