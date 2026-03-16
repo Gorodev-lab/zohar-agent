@@ -1,0 +1,147 @@
+nohup: ignoring input
+WARNING:root:⚠️ DuckDB locked (IO Error: Could not set lock on file "/home/gorops/gaceta_work/zohar_warehouse.duckdb": Conflicting lock is held in /usr/bin/python3.14 (PID 32499). See also https://duckdb.org/docs/stable/connect/concurrency). Usando modo in-memory para esta sesión.
+12:40:19 INFO    🚀 ZOHAR AGENT v2.2 ACTIVO | Memoria: {'total_db': 0, 'grounded_db': 0}
+INFO:zohar:🚀 ZOHAR AGENT v2.2 ACTIVO | Memoria: {'total_db': 0, 'grounded_db': 0}
+12:40:19 INFO      ZOHAR AGENT v2.2  |  Años: 2026...2025  |  DRY_RUN:False
+INFO:zohar:  ZOHAR AGENT v2.2  |  Años: 2026...2025  |  DRY_RUN:False
+12:40:19 INFO      Queue: {'total': 1715, 'success': 114, 'pending': 1457, 'failed': 144}
+INFO:zohar:  Queue: {'total': 1715, 'success': 114, 'pending': 1457, 'failed': 144}
+12:40:19 INFO    ══════════════════════════════════════════════════════════
+INFO:zohar:══════════════════════════════════════════════════════════
+12:40:19 INFO    HIGH-THROUGHPUT BATCH ESCALATION ACTIVE — Processing temporal index: [2026, 2025]
+INFO:zohar:HIGH-THROUGHPUT BATCH ESCALATION ACTIVE — Processing temporal index: [2026, 2025]
+12:40:19 INFO    Zohar Dashboard connection lost. Standing by for heartbeat...
+INFO:zohar:Zohar Dashboard connection lost. Standing by for heartbeat...
+12:40:24 INFO    Initiating extraction cycle: 1457 identifiers queued.
+INFO:zohar:Initiating extraction cycle: 1457 identifiers queued.
+12:40:24 INFO    [Extraction] 1457 identifiers — Concurrency mode
+INFO:zohar:[Extraction] 1457 identifiers — Concurrency mode
+12:40:24 INFO      [3/3] 08CI2020V0014 (Async)
+INFO:zohar:  [3/3] 08CI2020V0014 (Async)
+12:40:24 WARNING     [Gate-C] Contexto pobre para 08CI2020V0014 (44 chars únicos) — intentando OCR
+WARNING:zohar:    [Gate-C] Contexto pobre para 08CI2020V0014 (44 chars únicos) — intentando OCR
+12:40:24 INFO      👁️  Activando OCR Vision (Qwen2-VL) para 08CI2020V0014...
+INFO:zohar:  👁️  Activando OCR Vision (Qwen2-VL) para 08CI2020V0014...
+12:40:29 INFO      [3/3] 08CI2025MD066 (Async)
+INFO:zohar:  [3/3] 08CI2025MD066 (Async)
+12:40:29 INFO        ✨ Intentando extracción Élite (Gemini + Grounding) para 08CI2025MD066
+INFO:zohar:    ✨ Intentando extracción Élite (Gemini + Grounding) para 08CI2025MD066
+12:40:29 WARNING     Gemini Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+WARNING:zohar:    Gemini Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+12:40:29 INFO        🔄 Falling back to Local Inference (Mistral) for 08CI2025MD066
+INFO:zohar:    🔄 Falling back to Local Inference (Mistral) for 08CI2025MD066
+12:40:29 INFO      [2/3] 08CI2026HD005 (Async)
+INFO:zohar:  [2/3] 08CI2026HD005 (Async)
+12:40:29 INFO        ✨ Intentando extracción Élite (Gemini + Grounding) para 08CI2026HD005
+INFO:zohar:    ✨ Intentando extracción Élite (Gemini + Grounding) para 08CI2026HD005
+12:40:29 WARNING     Gemini Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+WARNING:zohar:    Gemini Error: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+12:40:29 INFO        🔄 Falling back to Local Inference (Mistral) for 08CI2026HD005
+INFO:zohar:    🔄 Falling back to Local Inference (Mistral) for 08CI2026HD005
+12:40:30 INFO      [2/3] 10DU2026MD001 (Async)
+INFO:zohar:  [2/3] 10DU2026MD001 (Async)
+12:40:30 WARNING     [Gate-C] Contexto pobre para 10DU2026MD001 (47 chars únicos) — intentando OCR
+WARNING:zohar:    [Gate-C] Contexto pobre para 10DU2026MD001 (47 chars únicos) — intentando OCR
+12:40:30 INFO      👁️  Activando OCR Vision (Qwen2-VL) para 10DU2026MD001...
+INFO:zohar:  👁️  Activando OCR Vision (Qwen2-VL) para 10DU2026MD001...
+12:40:34 INFO      [2/3] 10DU2026MD004 (Async)
+INFO:zohar:  [2/3] 10DU2026MD004 (Async)
+12:40:34 WARNING     [Gate-C] Contexto pobre para 10DU2026MD004 (46 chars únicos) — intentando OCR
+WARNING:zohar:    [Gate-C] Contexto pobre para 10DU2026MD004 (46 chars únicos) — intentando OCR
+12:40:34 INFO      👁️  Activando OCR Vision (Qwen2-VL) para 10DU2026MD004...
+INFO:zohar:  👁️  Activando OCR Vision (Qwen2-VL) para 10DU2026MD004...
+12:40:51 WARNING     LLM call error: Server disconnected without sending a response.
+WARNING:zohar:    LLM call error: Server disconnected without sending a response.
+DEBUG:zohar:    [Loc-Finder] Fragmento: 'NO_HALLADO'...
+12:40:51 WARNING     LLM call error: Server disconnected without sending a response.
+WARNING:zohar:    LLM call error: Server disconnected without sending a response.
+DEBUG:zohar:    [Loc-Finder] Fragmento: 'NO_HALLADO'...
+12:40:51 WARNING     LLM call error: All connection attempts failed
+WARNING:zohar:    LLM call error: All connection attempts failed
+12:40:51 WARNING     Inference anomaly (attempt 1)
+WARNING:zohar:    Inference anomaly (attempt 1)
+12:40:54 WARNING     LLM call error: All connection attempts failed
+WARNING:zohar:    LLM call error: All connection attempts failed
+12:40:54 WARNING     Inference anomaly (attempt 1)
+WARNING:zohar:    Inference anomaly (attempt 1)
+12:40:57 WARNING     LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+WARNING:zohar:    LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+12:40:57 WARNING     Inference anomaly (attempt 2)
+WARNING:zohar:    Inference anomaly (attempt 2)
+12:41:03 WARNING     LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+WARNING:zohar:    LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+12:41:03 WARNING     Inference anomaly (attempt 2)
+WARNING:zohar:    Inference anomaly (attempt 2)
+12:41:10 WARNING     LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+WARNING:zohar:    LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+12:41:10 WARNING     Inference anomaly (attempt 3)
+WARNING:zohar:    Inference anomaly (attempt 3)
+12:41:19 INFO        [Fallback-Vision] 08CI2026HD005
+INFO:zohar:    [Fallback-Vision] 08CI2026HD005
+12:41:19 INFO      👁️  Activando OCR Vision (Qwen2-VL) para 08CI2026HD005...
+INFO:zohar:  👁️  Activando OCR Vision (Qwen2-VL) para 08CI2026HD005...
+12:41:29 WARNING     LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+WARNING:zohar:    LLM call error: Client error '400 Bad Request' for url 'http://127.0.0.1:8001/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+12:41:29 WARNING     Inference anomaly (attempt 3)
+WARNING:zohar:    Inference anomaly (attempt 3)
+12:41:38 INFO        [Fallback-Vision] 08CI2025MD066
+INFO:zohar:    [Fallback-Vision] 08CI2025MD066
+12:41:38 INFO      👁️  Activando OCR Vision (Qwen2-VL) para 08CI2025MD066...
+INFO:zohar:  👁️  Activando OCR Vision (Qwen2-VL) para 08CI2025MD066...
+12:42:47 INFO      ✨ Vision OCR exitoso para 10DU2026MD001
+INFO:zohar:  ✨ Vision OCR exitoso para 10DU2026MD001
+DEBUG:zohar:    [Gate-1] 10DU2026MD001 score=90 deficient=['municipio', 'sector']
+12:42:47 INFO      🌐 Portal: consultando 10DU2026MD001 (Intento 1)
+INFO:zohar:  🌐 Portal: consultando 10DU2026MD001 (Intento 1)
+12:42:57 WARNING     ⚠️ Timeout/Error en portal para 10DU2026MD001. Esperando reintento...
+WARNING:zohar:    ⚠️ Timeout/Error en portal para 10DU2026MD001. Esperando reintento...
+12:43:02 INFO      🌐 Portal: consultando 10DU2026MD001 (Intento 2)
+INFO:zohar:  🌐 Portal: consultando 10DU2026MD001 (Intento 2)
+12:43:12 WARNING     ⚠️ Timeout/Error en portal para 10DU2026MD001. Esperando reintento...
+WARNING:zohar:    ⚠️ Timeout/Error en portal para 10DU2026MD001. Esperando reintento...
+12:43:22 INFO      🌐 Portal: consultando 10DU2026MD001 (Intento 3)
+INFO:zohar:  🌐 Portal: consultando 10DU2026MD001 (Intento 3)
+12:43:31 WARNING     ⚠️ Timeout/Error en portal para 10DU2026MD001. Esperando reintento...
+WARNING:zohar:    ⚠️ Timeout/Error en portal para 10DU2026MD001. Esperando reintento...
+12:43:46 ERROR       ❌ Fallo definitivo tras 3 intentos para 10DU2026MD001
+ERROR:zohar:    ❌ Fallo definitivo tras 3 intentos para 10DU2026MD001
+12:43:46 INFO      [2/3] 11GU2025UD107 (Async)
+INFO:zohar:  [2/3] 11GU2025UD107 (Async)
+12:43:46 WARNING     [Gate-C] Contexto pobre para 11GU2025UD107 (48 chars únicos) — intentando OCR
+WARNING:zohar:    [Gate-C] Contexto pobre para 11GU2025UD107 (48 chars únicos) — intentando OCR
+12:43:46 INFO      👁️  Activando OCR Vision (Qwen2-VL) para 11GU2025UD107...
+INFO:zohar:  👁️  Activando OCR Vision (Qwen2-VL) para 11GU2025UD107...
+Traceback (most recent call last):
+  File "/home/gorops/proyectos antigravity/zohar-agent/agent/zohar_agent_v2.py", line 2044, in <module>
+    log.info("Agent process terminated gracefully.")
+    ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/gorops/proyectos antigravity/zohar-agent/agent/zohar_agent_v2.py", line 2019, in main
+    # 2. Si hay trabajo, procesar SIN DESCANSO (si el dashboard está vivo)
+  File "/home/gorops/proyectos antigravity/zohar-agent/agent/zohar_agent_v2.py", line 1898, in run_extraction
+    queue=queue, log=log,
+    ^^^^^^^^^^^^^^^^
+  File "/home/gorops/proyectos antigravity/zohar-agent/agent/zohar_agent_v2.py", line 1891, in process_item
+        log.warning(f"    [Skip] {item.pid}: {err}")
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    await _validate_and_persist(
+    ^
+  File "/home/gorops/proyectos antigravity/zohar-agent/agent/zohar_agent_v2.py", line 1726, in _validate_and_persist
+TypeError: 'dict' object can't be awaited

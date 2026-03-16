@@ -7,9 +7,9 @@ import datetime
 import json
 import subprocess
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -44,16 +44,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir Dashboard
+# Servir Frontend
+app.mount("/dashboard", StaticFiles(directory=str(DASHBOARD_DIR)), name="dashboard")
+
 @app.get("/", response_class=HTMLResponse)
-async def get_dashboard():
-    index_file = DASHBOARD_DIR / "index.html"
-    if not index_file.exists():
-        return "Dashboard index.html not found."
-    return index_file.read_text()
+async def get_index():
+    index_path = DASHBOARD_DIR / "index.html"
+    if index_path.exists():
+        return index_path.read_text()
+    return "Dashboard index.html not found"
+
+HEARTBEAT_FILE = HOME / ".zohar_heartbeat"
+
+def touch_heartbeat():
+    try:
+        HEARTBEAT_FILE.touch()
+    except:
+        pass
 
 @app.get("/api/status")
 async def get_status():
+    touch_heartbeat()
     temp = "N/A"
     try:
         out = subprocess.check_output(['sensors'], text=True)
@@ -72,204 +83,97 @@ async def get_status():
         "mode": "híbrido-local"
     }
 
-@app.get("/api/projects")
-async def get_projects():
-    df = load_audited_data()
-    try:
-        if hasattr(df, "fillna"):
-            data = df.fillna("").to_dict("records")
-        else:
-            data = df
-        if not data: return []
-        data.sort(key=lambda x: (str(x.get("ANIO", "")), str(x.get("ID_PROYECTO", ""))), reverse=True)
-        return data[:500]
-    except:
-        return []
-
 @app.get("/api/agent_state")
 async def get_agent_state():
-    # Detectar si estamos en Vercel (Cloud Mirror)
+    touch_heartbeat()
     is_vercel = os.environ.get("VERCEL") == "1"
-    
     if is_vercel and supabase_client:
         try:
-            # Obtener el último heartbeat del agente desde la nube
             res = supabase_client.table("agente_status").select("*").eq("id", 1).execute()
             if res.data:
                 s = res.data[0]
-                # Convertir formato ISO a legible HH:MM:SS para la UI
-                try:
-                    ts = datetime.datetime.fromisoformat(s["last_seen"]).strftime("%H:%M:%S")
-                except:
-                    ts = "--:--:--"
-                return {
-                    "pdf": s["pdf"],
-                    "action": s["action"],
-                    "target": s["target"],
-                    "time": ts,
-                    "mode": "mirror"
-                }
-        except Exception as e:
-            print(f"Cloud state error: {e}")
-
-    # Comportamiento Local
+                return {"pdf": s["pdf"], "action": s["action"], "target": s["target"], "time": s.get("last_seen", "")[-8:]}
+        except: pass
     if STATE_FILE.exists():
         try:
             return json.loads(STATE_FILE.read_text())
         except: pass
     return {"pdf": "IDLE", "action": "STANDBY", "target": "NONE"}
 
-@app.get("/api/logs")
-async def get_logs():
-    if not LOG_FILE.exists(): return []
+@app.get("/api/projects")
+async def get_projects():
+    touch_heartbeat()
     try:
-        lines = LOG_FILE.read_text().splitlines()[-20:]
-        logs = []
-        for line in lines:
-            try:
-                entry = json.loads(line)
-                logs.append({
-                    "ts": entry.get("ts", "")[-8:],
-                    "msg": entry.get("msg", ""),
-                    "level": entry.get("level", "INFO")
-                })
-            except: continue
-        return logs
-    except: return []
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql_query("SELECT * FROM projects ORDER BY year DESC, created_at DESC LIMIT 100", conn)
+            # Renombrar columnas
+            df = df.rename(columns={"pid": "ID_PROYECTO", "year": "ANIO"})
+            # Usar to_json para manejar NaN -> null correctamente
+            json_str = df.to_json(orient="records")
+            return json.loads(json_str)
+    except Exception as e:
+        print(f"Error fetching projects: {e}")
+        return []
 
 @app.get("/api/diagnostics")
 async def get_diagnostics():
-    csv_rows = 0
-    csv_size = 0
-    if CSV_PATH.exists():
-        csv_size = os.path.getsize(CSV_PATH) // 1024
-        csv_rows = sum(1 for _ in open(CSV_PATH))
-            
-    # Queue Stats Reales
-    queue_data = {"pending": 0, "success": 0, "failed": 0, "progress_pct": 0}
-    if QUEUE_FILE.exists():
+    touch_heartbeat()
+    # Real-time process stats
+    stats = {}
+    try:
+        # CPU/Mem for agent
+        agent_pid = None
         try:
-            q = json.loads(QUEUE_FILE.read_text())
-            items = q.values() if isinstance(q, dict) else q
-            queue_data["pending"] = len([i for i in items if i.get("status") == "pending"])
-            queue_data["success"] = len([i for i in items if i.get("status") == "success"])
-            queue_data["failed"] = len([i for i in items if i.get("status") in ["failed", "error"]])
-            total = len(items)
-            if total > 0:
-                queue_data["progress_pct"] = int((queue_data["success"] / total) * 100)
+            agent_pid = subprocess.check_output(["pgrep", "-f", "zohar_agent_v2"], text=True).strip()
         except: pass
-
-    llama_ok, _ = _check_service("http://127.0.0.1:8001/v1/models")
-    ocr_ok, _ = _check_service("http://127.0.0.1:8002/v1/models")
-    agent_alive = _is_agent_alive()
-
+        
+        if agent_pid:
+            top = subprocess.check_output(["ps", "-p", agent_pid, "-o", "%cpu,%mem,cmd"], text=True).splitlines()
+            if len(top) > 1:
+                cpu, mem, cmd = top[1].strip().split(None, 2)
+                stats["agent"] = {"cpu": cpu, "mem": mem, "running": True}
+        else:
+            stats["agent"] = {"running": False}
+            
+        # Queue stats
+        if QUEUE_FILE.exists():
+            q = json.loads(QUEUE_FILE.read_text())
+            stats["queue"] = {
+                "total": len(q),
+                "success": sum(1 for v in q.values() if v.get("status") == "success"),
+                "pending": sum(1 for v in q.values() if v.get("status") == "pending"),
+                "failed": sum(1 for v in q.values() if v.get("status") == "failed"),
+            }
+            if stats["queue"]["total"] > 0:
+                stats["queue"]["progress_pct"] = round((stats["queue"]["success"] / stats["queue"]["total"]) * 100, 1)
+    except:
+        pass
+        
     return {
         "ts": datetime.datetime.now().isoformat(),
-        "services": {
-            "llama": {"status": "en línea" if llama_ok else "fuera de línea", "running": True},
-            "ocr": {"status": "en línea" if ocr_ok else "fuera de línea", "running": True},
-            "agent": {"running": agent_alive, "pid_file": os.path.exists("/tmp/zohar_agent_v2.pid")}
-        },
-        "csv": {"rows": csv_rows, "size_kb": csv_size},
-        "queue": queue_data,
-        "issues": []
+        "services": stats,
+        "mode": "arch-linux-terminal-mvp"
     }
 
-@app.post("/api/control")
-async def post_control(request: Request):
-    """
-    Protocolo de Reinicio y Mantenimiento (Local + Cloud).
-    """
+@app.get("/api/logs")
+async def get_logs():
+    if not LOG_FILE.exists():
+        return []
     try:
-        data = await request.json()
-        action = data.get("action")
-        target = data.get("target", "all")
-        
-        ctl_script = BASE_DIR / "agent" / "zohar_ctl.sh"
-        
-        if action == "restart":
-            if target in ["agent", "all"]:
-                # Detener y arrancar daemon (usa sentinel para red/green)
-                subprocess.run(["bash", str(ctl_script), "stop"], check=False)
-                subprocess.Popen(["bash", str(ctl_script), "start-daemon"], 
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
-                return {"status": "ok", "msg": "Reinicio de Agente iniciado (Protocolo Sentinel Activo)"}
-                
-        elif action == "stop":
-            subprocess.run(["bash", str(ctl_script), "stop"], check=False)
-            return {"status": "ok", "msg": "Agente detenido"}
+        # Leer las últimas 50 líneas
+        with open(LOG_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            # Parsear JSON lines
+            logs = []
+            for line in lines[-50:]:
+                try:
+                    logs.append(json.loads(line))
+                except:
+                    pass
+            return logs
+    except:
+        return []
 
-        elif action == "sweep":
-            if target in ["agent", "all"]:
-                subprocess.run(["bash", str(ctl_script), "stop"], check=False)
-                subprocess.Popen(["bash", str(ctl_script), "sweep"], 
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
-                return {"status": "ok", "msg": "Barrido Histórico (Sweep) iniciado"}
-                
-        elif action == "retry-failed":
-            subprocess.run(["bash", str(ctl_script), "retry-failed"], check=False)
-            return {"status": "ok", "msg": "IDs fallidos reseteados a pendiente"}
-            
-        elif action == "sync-cloud":
-            # Verificar Supabase (simulado o via script)
-            return {"status": "ok", "msg": "Sincronización Cloud Verificada"}
-
-        return {"status": "error", "msg": "Acción no reconocida"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/audit")
-async def post_audit(request: Request):
-    try:
-        data = await request.json()
-        pid = data.get("pid")
-        status = data.get("status")
-        notes = data.get("notes", "")
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute("UPDATE projects SET audit_status = ?, auditor_notes = ? WHERE pid = ?", (status, notes, pid))
-        return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/cloud-projects")
-async def get_cloud_projects():
-    if not supabase_client:
-        return await get_projects()
-    
-    try:
-        # Consultar la tabla 'proyectos' de Supabase
-        response = supabase_client.table("proyectos").select("*").order("anio", desc=True).limit(500).execute()
-        data = response.data
-        
-        # Mapear nombres de columnas de Supabase a los esperados por el Dashboard
-        mapped_data = []
-        for row in data:
-            mapped_row = {
-                "ID_PROYECTO": row.get("id_proyecto"),
-                "ANIO": row.get("anio"),
-                "ESTADO": row.get("estado"),
-                "MUNICIPIO": row.get("municipio"),
-                "LOCALIDAD": row.get("localidad"),
-                "PROYECTO": row.get("proyecto"),
-                "PROMOVENTE": row.get("promovente"),
-                "SECTOR": row.get("sector"),
-                "INSIGHT": row.get("insight"),
-                "COORDENADAS": row.get("coordenadas"),
-                "POLIGONO": row.get("poligono"),
-                "audit_status": row.get("audit_status", "cloud"),
-                "grounded": True
-            }
-            mapped_data.append(mapped_row)
-            
-        return mapped_data
-    except Exception as e:
-        # Fallback a local si falla la nube
-        print(f"Cloud fetch error: {e}")
-        return await get_projects()
-
-# Helpers
 def _check_service(url: str, timeout: int = 5):
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
@@ -283,37 +187,6 @@ def _is_agent_alive():
         return bool(out.strip())
     except:
         return False
-
-def load_audited_data():
-    if not DB_PATH.exists(): return pd.DataFrame()
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            df = pd.read_sql_query("SELECT * FROM projects", conn)
-            return df.rename(columns={
-                "pid": "ID_PROYECTO", "year": "ANIO", "estado": "ESTADO",
-                "municipio": "MUNICIPIO", "localidad": "LOCALIDAD",
-                "proyecto": "PROYECTO", "promovente": "PROMOVENTE",
-                "sector": "SECTOR", "insight": "INSIGHT",
-                "coordenadas": "COORDENADAS", "poligono": "POLIGONO"
-            })
-    except: return pd.DataFrame()
-
-def is_valid_record(project: str, promovente: str, source: str) -> bool:
-    """
-    Filtro de integridad Cero Alucinaciones para validación de registros.
-    """
-    if len(project) < 5 or len(promovente) < 4:
-        return False
-    
-    forbidden = ["DESCONOCIDO", "ID_PROYECTO", "EL ID", "NOMBRE ESPECIFICO", "PROYECTO DE INVERSIÓN"]
-    for word in forbidden:
-        if word in project.upper() or word in promovente.upper():
-            return False
-            
-    if not source or source == "no-link" or not source.startswith("http"):
-        return False
-        
-    return True
 
 if __name__ == "__main__":
     import uvicorn

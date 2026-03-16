@@ -60,7 +60,7 @@ try:
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     gemini_client = None
     if GEMINI_API_KEY:
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1'})
 except ImportError:
     gemini_client = None
 
@@ -112,6 +112,8 @@ CONFIG: dict[str, Any] = {
     "YEARS":             [2026, 2025],
     "DRY_RUN":           False,
     "DAEMON_MODE":       False,
+    "HEARTBEAT_FILE":    HOME / ".zohar_heartbeat",
+    "HEARTBEAT_TIMEOUT": 30, # segundos
 }
 
 # ─────────────────────────────────────────────────────────
@@ -283,7 +285,7 @@ class PersistentQueue:
         if pid in self._d:
             item = self._d[pid]
             item.attempts  += 1
-            item.last_error = error[:120]
+            item.last_error = str(error)[:120]
             item.updated_at = datetime.datetime.now().isoformat(timespec="seconds")
             if item.attempts >= CONFIG["MAX_RETRIES"]:
                 item.status = "failed"
@@ -417,8 +419,8 @@ class LocalIntelligenceMemory:
                     LIMIT 1
                 """
                 # Usamos los primeros 20 caracteres para evitar variaciones menores en el nombre
-                name_prefix = f"{project_name[:20]}%"
-                prom_prefix = f"{promovente[:15]}%"
+                name_prefix = f"{str(project_name)[:20]}%"
+                prom_prefix = f"{str(promovente)[:15]}%"
                 cur = conn.execute(query, (name_prefix, prom_prefix))
                 res = cur.fetchone()
                 return dict(res) if res else None
@@ -543,7 +545,7 @@ class PortalMetadataCache:
     """Cache persistente para evitar latencia extrema del portal SEMARNAT."""
     def __init__(self, cache_file: Path):
         self.path = cache_file
-        self._cache = {}
+        self._cache: dict[str, Any] = {}
         self._load()
 
     def _load(self):
@@ -742,7 +744,8 @@ def report_state(pdf: str, action: str, target: str):
                         "target": s["target"],
                         "last_seen": datetime.datetime.now().isoformat()
                     }
-                    supabase_client.table("agente_status").upsert(payload, on_conflict="id").execute()
+                    if supabase_client:
+                        supabase_client.table("agente_status").upsert(payload, on_conflict="id").execute()
                 except Exception:
                     pass
             
@@ -751,6 +754,17 @@ def report_state(pdf: str, action: str, target: str):
             
     except Exception:
         pass
+
+def is_dashboard_alive() -> bool:
+    """Verifica si el dashboard está abierto basándose en el archivo de heartbeat."""
+    hb_file = CONFIG["HEARTBEAT_FILE"]
+    if not hb_file.exists():
+        return False
+    try:
+        mtime = hb_file.stat().st_mtime
+        return (time.time() - mtime) < CONFIG["HEARTBEAT_TIMEOUT"]
+    except Exception:
+        return False
 
 
 # ─────────────────────────────────────────────────────────
@@ -765,7 +779,7 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
     report_state("—", "MONITOREANDO", f"Gaceta {year} (Selenium)")
     log.info(f"🔍 Verificando Gaceta {year} (HTTP First): {url}")
     
-    async def _get_html():
+    def _get_html():
         html = http_get(url, timeout=60)
         
         if html is None or "document.write" in html or len(html) < 500:
@@ -875,14 +889,14 @@ async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
     ids = sorted(set(ID_PATTERN.findall(txt)))
 
     MAX_IDS_PER_PDF = 10 # No saturar la cola, avanzar gradual
-    new_count = 0
+    new_count: int = 0
     for pid in ids:
         if new_count >= MAX_IDS_PER_PDF: break
         # Si ya está en cola o en CSV, saltar
         if pid in queue._d or pid_in_csv(pid):
             continue
         if queue.add(pid=pid, pdf=filename, year=year, txt_file=str(txt_path)):
-            new_count += 1
+            new_count = new_count + 1
 
     log.info(f"  🆔 {len(ids)} IDs en PDF, {new_count} nuevos en queue")
     return new_count
@@ -934,14 +948,14 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
                 if min: d += float(min) / 60
                 if sec: d += float(sec) / 3600
                 if hem in ['S', 'W']: d *= -1
-                coords.append(f"{d:.5f}")
+                coords.append(str(f"{d:.5f}"))
             return ", ".join(coords)
         return text
 
     raw_coord = _normalize_coords(raw_coord)
     
     # 2. Forzar Estado correcto según los 2 primeros dígitos del PID (Standard SEMARNAT)
-    state_code = pid[:2]
+    state_code = str(pid)[:2]
     if state_code in STATE_CODES:
         data["estado"] = STATE_CODES[state_code]
     
@@ -1024,7 +1038,7 @@ def normalize_extracted_data(pid: str, data: dict) -> dict:
         proj_title = str(data.get("proyecto", ""))
         state_name = data.get("estado", "MÉXICO")
         if len(proj_title) > 30:
-             data["insight"] = f"Análisis técnico del proyecto: {proj_title[:150]}..."
+             data["insight"] = f"Análisis técnico del proyecto: {str(proj_title)[:150]}..."
         else:
              data["insight"] = f"Evaluación de Manifestación de Impacto Ambiental para el proyecto {proj_title} en {state_name}. Se requiere revisión manual de confidencialidad."
     else:
@@ -1078,8 +1092,8 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
             # Criterio de grounding: reemplazar SOLO si el valor IA está vacío,
             # es demasiado corto (<4 chars) — indicador de corte de token —,
             # o el portal aporta información sustancialmente más larga (>5 chars más).
-            ai_is_deficient = len(ai_val) < 4
-            portal_enriches = len(official_val) > len(ai_val) + 5
+            ai_is_deficient = len(ai_val or "") < 4
+            portal_enriches = len(official_val or "") > len(ai_val or "") + 5
             if ai_is_deficient or portal_enriches:
                 if len(ai_val) > 3:
                     log.debug(f"    Grounding {target}: '{ai_val}' -> '{official_val}'")
@@ -1093,7 +1107,7 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
 
 
 
-async def _llm_call(messages: list, max_tokens: int, stop: list = None, log: logging.Logger = None) -> Optional[str]:
+async def _llm_call(messages: list, max_tokens: int, stop: Optional[List[str]] = None, log: Optional[logging.Logger] = None) -> Optional[str]:
     """
     Llamada asíncrona al LLM en formato OpenAI chat/completions usando httpx.
     """
@@ -1117,7 +1131,7 @@ async def _llm_call(messages: list, max_tokens: int, stop: list = None, log: log
         return None
 
 
-async def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional[dict]:
+def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional[dict]:
     """
     Extracción Élite con Gemini Pro + Google Search Grounding.
     """
@@ -1162,8 +1176,8 @@ async def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Op
 
         google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
-        response = await gemini_client.models.generate_content(
-            model='gemini-flash-latest',
+        response = gemini_client.models.generate_content(
+            model='gemini-1.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[google_search_tool],
@@ -1179,7 +1193,11 @@ async def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Op
             log.warning(f"    Gemini returned invalid format: {type(extracted)}")
             return None
 
-        extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
+        # Normalizar claves y valores (convertir a str excepto listas de fuentes)
+        extracted = {k.lower().strip(): v for k, v in extracted.items()}
+        for k, v in extracted.items():
+            if k != "fuentes_web":
+                extracted[k] = str(v).strip()
 
         # Capturar fuentes de Grounding
         fuentes = []
@@ -1191,19 +1209,20 @@ async def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Op
             if meta.grounding_chunks:
                 for chunk in meta.grounding_chunks:
                     if chunk.web:
-                        fuentes.append(chunk.web.uri)
+                        fuentes.append({
+                            "uri": chunk.web.uri,
+                            "title": getattr(chunk.web, 'title', 'Fuente Externa')
+                        })
             
-            # Opción 2: parsear rendered_content (HTML chips)
+            # Fallback a parsear rendered_content (HTML chips)
             if not fuentes and hasattr(meta, 'search_entry_point') and meta.search_entry_point:
                 html = meta.search_entry_point.rendered_content
                 found = re.findall(r'href="(https://[^"]+)"', html)
                 if found:
-                    fuentes.extend(found)
-                    log.debug(f"    [Gemini-Grounding] Extracted {len(found)} URIs from HTML chips")
-            # También revisar search_entry_point si existe
-            if hasattr(meta, 'search_entry_point') and meta.search_entry_point:
-                 log.debug(f"    [Gemini-Grounding] Search entry point: {meta.search_entry_point.rendered_content}")
-        
+                    for url in found:
+                        if not any(f["uri"] == url for f in fuentes):
+                            fuentes.append({"uri": url, "title": "Portal de Transparencia / Google Search"})
+            
         if fuentes:
             extracted["fuentes_web"] = fuentes
             log.info(f"    ✨ Grounding exitoso: {len(fuentes)} fuentes halladas")
@@ -1230,7 +1249,7 @@ async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name:
     # ── INTENTO ÉLITE: Gemini + Grounding ────────────────────────────────
     if gemini_client:
         log.info(f"    ✨ Intentando extracción Élite (Gemini + Grounding) para {pid}")
-        extracted = await extract_with_gemini(pid, context, log)
+        extracted = extract_with_gemini(pid, context, log)
         if extracted:
             return extracted
 
@@ -1239,10 +1258,7 @@ async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name:
     
     # Cargar prompts dinámicamente
     loc_finder_template = prompts.get_prompt("location_finder", DEFAULT_LOC_FINDER) if prompts else DEFAULT_LOC_FINDER
-    ext_template = prompts.get_prompt("extraction_v2", "") 
-    if not ext_template:
-        log.error("    ❌ Fallo crítico: no se encontró el prompt de extracción doctoral.")
-        return None
+    ext_template = prompts.get_prompt("extraction_v2", DEFAULT_EXTRACTION_PROMPT) if prompts else DEFAULT_EXTRACTION_PROMPT
 
     # ── PASO 1: Location Finder (Desambiguación Preliminar) ─────────────
     loc_prompt = loc_finder_template.format(pid=pid, context=context)
@@ -1252,13 +1268,13 @@ async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name:
         log=log,
     ) or "NO_HALLADO"
 
-    log.debug(f"    [Loc-Finder] Fragmento: {location_snippet[:100]!r}...")
+    log.debug(f"    [Loc-Finder] Fragmento: {str(location_snippet)[:100]!r}...")
 
     # ── PASO 2: Extracción Doctoral con CoT ─────────────────────────────
     ext_prompt = ext_template.format(
         pid=pid,
         location_snippet=location_snippet,
-        context=context[:CONFIG["CONTEXT_CHARS"]],
+        context=str(context)[:CONFIG["CONTEXT_CHARS"]],
     )
 
     for attempt in range(1, CONFIG["MAX_RETRIES"] + 1):
@@ -1293,7 +1309,7 @@ async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name:
             start = raw.find("{")
             end = raw.rfind("}")
             if start != -1 and end != -1 and end > start:
-                json_match = raw[start : end + 1].strip()
+                json_match = str(raw)[start : end + 1].strip()
         
         if json_match:
             # Capturar razonamiento si existe
@@ -1326,7 +1342,7 @@ async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name:
                 
                 return cleaned
             except json.JSONDecodeError as e:
-                log.debug(f"    JSON Auditor Alert (attempt {attempt}): {e} — snippet: {json_match[:100]!r}")
+                log.debug(f"    JSON Auditor Alert (attempt {attempt}): {e} — snippet: {str(json_match)[:100]!r}")
                 time.sleep(2)
                 continue
 
@@ -1406,7 +1422,7 @@ def write_to_supabase(year: int, pid: str, d: dict, log: logging.Logger):
 # ─────────────────────────────────────────────────────────
 # PASO 4: FETCH — Portal SEMARNAT, descarga de documentos
 # ─────────────────────────────────────────────────────────
-def fetch_portal_docs(pid: str, log: logging.Logger) -> dict:
+async def fetch_portal_docs(pid: str, log: logging.Logger) -> dict:
     """
     Consulta la API del portal SEMARNAT con reintentos robustos (Backoff Exponencial).
     Implementa SRE strategy del Codex Cap 10.2.
@@ -1589,7 +1605,7 @@ def audit_record(pid: str, d: dict, log: logging.Logger) -> tuple[int, list[str]
     penalty_score = 0
     
     # 1. Consistencia del Código de Estado (Pilar de Integridad)
-    pid_state_code = pid[:2]
+    pid_state_code = str(pid)[:2]
     expected_state = STATE_CODES.get(pid_state_code)
     extracted_state = str(d.get("estado", "")).upper()
     
@@ -1607,24 +1623,24 @@ def score_record(d: dict) -> tuple[int, list[str]]:
     Un score ≥ 60 es suficiente para persistir.
     Un score ≥ 80 es de alta confianza.
     """
-    score = 0
-    deficient = []
+    score: int = 0
+    deficient: List[str] = []
 
     for field, weight in FIELD_WEIGHTS.items():
         val = str(d.get(field, "")).strip().lower()
         if val and val not in PLACEHOLDER_TERMS and len(val) > 2:
-            score += weight
+            score = score + int(weight)
         else:
             deficient.append(field)
 
     # Bonus: insight largo y específico
     insight = str(d.get("insight", "")).strip()
     if len(insight) > 80:
-        score = min(100, score + 5)
+        score = min(100, int(score) + 5)
 
     # Bonus: coordenadas o polígono presentes
     if d.get("coordenadas") or d.get("poligono"):
-        score = min(100, score + 5)
+        score = min(100, int(score) + 5)
 
     return score, deficient
 
@@ -1671,7 +1687,7 @@ Responde ÚNICAMENTE con un objeto JSON con esos campos. Si no encuentras el val
                 patch_val = patch.get(field, "").strip().lower()
                 if patch_val and patch_val not in PLACEHOLDER_TERMS and len(patch_val) > 2:
                     d[field] = patch[field]
-                    log.debug(f"    [Repair] {field} → '{patch[field][:60]}'")
+                    log.debug(f"    [Repair] {field} → '{str(patch[field])[:60]}'")
         except json.JSONDecodeError:
             pass
     return d
@@ -1819,7 +1835,7 @@ async def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], st
 
     # Gate C: ventana de contexto con contenido útil
     half = CONFIG["CONTEXT_CHARS"] // 2
-    raw_ctx = txt[max(0, idx - half): idx + half]
+    raw_ctx = str(txt)[max(0, idx - half): idx + half]
     context = re.sub(r'\s+', ' ', raw_ctx).strip()
 
     # Verificación de densidad: si hay menos de 50 chars únicas
@@ -1905,11 +1921,11 @@ def _process_portal_docs(pid: str, portal_data: dict, log: logging.Logger):
 
     for doc in docs:
         url  = doc.get("url") or doc.get("ruta") or doc.get("path", "")
-        name = (doc.get("tipo") or doc.get("name") or "").lower()
+        name = str(doc.get("tipo") or doc.get("name") or "").lower()
         if not url:
             continue
         for doc_type, keys in doc_map.items():
-            if any(k in name for k in keys):
+            if any(str(k) in name for k in keys):
                 download_document(pid, url, doc_type, log)
                 break
 
@@ -1998,12 +2014,16 @@ async def main():
             queue = PersistentQueue(CONFIG["QUEUE_FILE"])
             pending_count = len(queue.pending())
             
-            # 2. Si hay trabajo, procesar SIN DESCANSO
+            # 2. Si hay trabajo, procesar SIN DESCANSO (si el dashboard está vivo)
             if pending_count > 0:
-                log.info(f"Initiating extraction cycle: {pending_count} identifiers queued.")
-                await run_extraction(queue, log)
-                # Volver al inicio del bucle inmediatamente
-                continue
+                if is_dashboard_alive():
+                    log.info(f"Initiating extraction cycle: {pending_count} identifiers queued.")
+                    await run_extraction(queue, log)
+                    continue
+                else:
+                    log.info("Zohar Dashboard connection lost. Standing by for heartbeat...")
+                    await asyncio.sleep(5)
+                    continue
             
             # 3. Si no hay trabajo de IA, buscar gacetas nuevas
             log.info("Queue empty. Initiating search for new datasets...")
