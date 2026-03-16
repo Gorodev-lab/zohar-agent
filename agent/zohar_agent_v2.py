@@ -20,10 +20,11 @@ URLs clave:
 
 import os, re, json, csv, time, signal, logging, datetime, sys, sqlite3
 import subprocess, urllib.request, urllib.error, urllib.parse
-import hashlib
+import hashlib, asyncio, httpx, duckdb
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
-from typing import Optional, Any
+from typing import Optional, Any, List
+from aiocache import cached
 
 try:
     from dotenv import load_dotenv
@@ -59,7 +60,7 @@ try:
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     gemini_client = None
     if GEMINI_API_KEY:
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        gemini_client = genai.AsyncClient(api_key=GEMINI_API_KEY)
 except ImportError:
     gemini_client = None
 
@@ -112,6 +113,33 @@ CONFIG: dict[str, Any] = {
     "DRY_RUN":           False,
     "DAEMON_MODE":       False,
 }
+
+# ─────────────────────────────────────────────────────────
+# MOTORES DE ALTO RENDIMIENTO (STRATEGY 1)
+# ─────────────────────────────────────────────────────────
+# Semáforo para controlar concurrencia de extracción
+extraction_semaphore = asyncio.Semaphore(5)
+
+# Inicializar DuckDB (Storage local de alto rendimiento)
+DUCK_DB_FILE = CONFIG["WORK_DIR"] / "zohar_warehouse.duckdb"
+DUCK_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+duck_conn = duckdb.connect(str(DUCK_DB_FILE))
+duck_conn.execute("""
+    CREATE TABLE IF NOT EXISTS fragments_cache (
+        hash TEXT PRIMARY KEY,
+        result TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+duck_conn.execute("""
+    CREATE TABLE IF NOT EXISTS project_warehouse (
+        pid TEXT PRIMARY KEY,
+        data JSON,
+        grounded BOOLEAN,
+        audit_trace TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
 
 # Regex ID SEMARNAT: 2 dígitos + 2 letras + 4 dígitos + 2-5 alfanum
 # Ejemplos: 23QR2025TD077, 21PU2025H0155, 20OA2025V0090
@@ -450,6 +478,38 @@ class LocalIntelligenceMemory:
         except Exception:
             return {"total_db": 0, "grounded_db": 0}
 
+def sync_to_warehouse(log: logging.Logger):
+    """
+    Sincroniza los datos de SQLite a DuckDB para analítica de alto rendimiento.
+    Estrategia 1: Automated Data Warehouse.
+    """
+    try:
+        import duckdb
+        warehouse_path = CONFIG["WORK_DIR"] / "zohar_warehouse.duckdb"
+        con = duckdb.connect(str(warehouse_path))
+        
+        # Cargamos extensión de SQLite para DuckDB
+        con.execute("INSTALL sqlite; LOAD sqlite;")
+        
+        # Importar datos de la base operacional (SQLite)
+        # Usamos una vista o tabla temporal para el merge
+        con.execute(f"ATTACH '{CONFIG['DB_FILE']}' AS ops (TYPE SQLITE);")
+        
+        # Crear tabla si no existe
+        con.execute("CREATE TABLE IF NOT EXISTS warehouse_projects AS SELECT * FROM ops.projects WHERE 1=0")
+        
+        # Merge incremental
+        con.execute("""
+            INSERT INTO warehouse_projects 
+            SELECT * FROM ops.projects 
+            WHERE pid NOT IN (SELECT pid FROM warehouse_projects)
+        """)
+        
+        log.info(f"📊 Warehouse: {con.execute('SELECT COUNT(*) FROM warehouse_projects').fetchone()[0]} registros en DuckDB.")
+        con.close()
+    except Exception as e:
+        log.error(f"  ❌ Warehouse Error: {e}")
+
 # ─────────────────────────────────────────────────────────
 # PROMPT ARCHIVE MANAGER (Cap. 10 - Filesystem Governance)
 # ─────────────────────────────────────────────────────────
@@ -474,9 +534,36 @@ class PromptManager:
         self._cache[name] = content
         return content
 
+class PortalMetadataCache:
+    """Cache persistente para evitar latencia extrema del portal SEMARNAT."""
+    def __init__(self, cache_file: Path):
+        self.path = cache_file
+        self._cache = {}
+        self._load()
+
+    def _load(self):
+        if self.path.exists():
+            try:
+                self._cache = json.loads(self.path.read_text())
+            except Exception:
+                self._cache = {}
+
+    def get(self, pid: str) -> Optional[dict]:
+        data = self._cache.get(pid)
+        return data if data else None
+
+    def set(self, pid: str, data: dict):
+        if not data: return
+        self._cache[pid] = data
+        try:
+            self.path.write_text(json.dumps(self._cache, indent=2))
+        except Exception:
+            pass
+
 # Instancias Globales
 memory: Optional[LocalIntelligenceMemory] = None
 prompts: Optional[PromptManager] = None
+portal_cache: Optional[PortalMetadataCache] = None
 
 DEFAULT_LOC_FINDER = """\
 <instruction>
@@ -983,10 +1070,9 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
 
 
 
-def _llm_call(messages: list, max_tokens: int, stop: list = None, log: logging.Logger = None) -> Optional[str]:
+async def _llm_call(messages: list, max_tokens: int, stop: list = None, log: logging.Logger = None) -> Optional[str]:
     """
-    Llamada genérica al LLM en formato OpenAI chat/completions.
-    Compatible con DeepSeek R1 Distill y cualquier modelo llama-cpp-python.
+    Llamada asíncrona al LLM en formato OpenAI chat/completions usando httpx.
     """
     payload = {
         "model":       CONFIG["MODEL"],
@@ -998,25 +1084,29 @@ def _llm_call(messages: list, max_tokens: int, stop: list = None, log: logging.L
         payload["stop"] = stop
 
     try:
-        req = urllib.request.Request(
-            CONFIG["LLAMA_URL"],
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=CONFIG["LLAMA_TIMEOUT"]) as resp:
-            return json.loads(resp.read())["choices"][0]["message"]["content"]
+        async with httpx.AsyncClient(timeout=CONFIG["LLAMA_TIMEOUT"]) as client:
+            resp = await client.post(CONFIG["LLAMA_URL"], json=payload)
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
         if log:
             log.warning(f"    LLM call error: {e}")
         return None
 
 
-def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional[dict]:
+async def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional[dict]:
     """
-    Extracción ultra-rápida usando Gemini 2.0 Flash con Google Search Grounding.
+    Extracción Élite con Gemini Pro + Google Search Grounding.
     """
     if not gemini_client:
         return None
+
+    # ── CACHÉ SEMÁNTICA (STRATEGY 1) ──────────────────────────────────
+    fragment_hash = hashlib.sha256(context.encode()).hexdigest()
+    cached_row = duck_conn.execute("SELECT result FROM fragments_cache WHERE hash = ?", [fragment_hash]).fetchone()
+    if cached_row:
+        log.info(f"    🎯 Cache Hit (Semantic) para {pid}")
+        return json.loads(cached_row[0])
 
     try:
         # Prompt optimizado para Esoteria Intelligence Architecture + Gemini Grounding
@@ -1049,7 +1139,7 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
 
         google_search_tool = types.Tool(google_search=types.GoogleSearch())
 
-        response = gemini_client.models.generate_content(
+        response = await gemini_client.models.generate_content(
             model='gemini-flash-latest',
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -1095,6 +1185,10 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
             extracted["fuentes_web"] = fuentes
             log.info(f"    ✨ Grounding exitoso: {len(fuentes)} fuentes halladas")
 
+        # Guardar en caché semántica
+        duck_conn.execute("INSERT OR IGNORE INTO fragments_cache (hash, result) VALUES (?, ?)", 
+                         [fragment_hash, json.dumps(extracted)])
+
         return extracted
 
     except Exception as e:
@@ -1103,7 +1197,7 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
 
 
 # ── PIPELINE DE EXTRACCIÓN (DOCTORAL) ─────────────────────
-def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
+async def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str = "—") -> Optional[dict]:
     """
     Pipeline de extracción híbrido.
     1. Intenta Gemini (Élite + Grounding por Chunks).
@@ -1113,7 +1207,7 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str =
     # ── INTENTO ÉLITE: Gemini + Grounding ────────────────────────────────
     if gemini_client:
         log.info(f"    ✨ Intentando extracción Élite (Gemini + Grounding) para {pid}")
-        extracted = extract_with_gemini(pid, context, log)
+        extracted = await extract_with_gemini(pid, context, log)
         if extracted:
             return extracted
 
@@ -1129,7 +1223,7 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str =
 
     # ── PASO 1: Location Finder (Desambiguación Preliminar) ─────────────
     loc_prompt = loc_finder_template.format(pid=pid, context=context)
-    location_snippet = _llm_call(
+    location_snippet = await _llm_call(
         messages=[{"role": "user", "content": loc_prompt}],
         max_tokens=400,
         log=log,
@@ -1145,7 +1239,7 @@ def extract_with_ai(pid: str, context: str, log: logging.Logger, pdf_name: str =
     )
 
     for attempt in range(1, CONFIG["MAX_RETRIES"] + 1):
-        raw = _llm_call(
+        raw = await _llm_call(
             messages=[
                 {
                     "role": "system",
@@ -1338,7 +1432,7 @@ def download_document(pid: str, doc_url: str, doc_type: str, log: logging.Logger
         return None
 
 
-def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger) -> Optional[dict]:
+async def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger) -> Optional[dict]:
     """Extrae datos usando Qwen2-VL (Vision) si el texto está muy roto o es ilegible."""
     try:
         work_dir = CONFIG["WORK_DIR"] / str(year)
@@ -1377,49 +1471,41 @@ def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger)
                 "max_tokens": 600
             }
             
-            req = urllib.request.Request(CONFIG["OCR_URL"], data=json.dumps(payload).encode(),
-                                         headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=180) as r:
-                raw_response = r.read()
-                try:
-                    res = json.loads(raw_response)
-                except json.JSONDecodeError as e:
-                    log.error(f"  ❌ OCR API JSON Error: {e}")
-                    log.debug(f"  Raw API response: {raw_response[:500]!r}")
-                    return None
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    resp = await client.post(CONFIG["OCR_URL"], json=payload)
+                    resp.raise_for_status()
+                    res = resp.json()
+            except Exception as e:
+                log.error(f"  ❌ OCR API Error: {e}")
+                return None
 
-                content = res["choices"][0]["message"]["content"]
+            content = res["choices"][0]["message"]["content"]
+            
+            # Extraer JSON con regex robusta
+            m = re.search(r"(\{[\s\S]*\})", content)
+            if m:
+                json_str = m.group(1).strip()
+                # Limpieza agresiva de caracteres comunes mal formados por modelos de visión
+                json_str = re.sub(r'```json\s*', '', json_str)
+                json_str = re.sub(r'```', '', json_str)
+                json_str = re.sub(r'//.*', '', json_str)
+                json_str = re.sub(r':\s*(?![{\["\s])(.*?)\s*(?=[\n\r,\]\}])', r': "\1"', json_str)
+                json_str = re.sub(r',\s*\}', '}', json_str)
+                json_str = re.sub(r',\s*\]', ']', json_str)
                 
-                # Extraer JSON con regex robusta
-                m = re.search(r"(\{[\s\S]*\})", content)
-                if m:
-                    json_str = m.group(1).strip()
-                    # Limpieza agresiva de caracteres comunes mal formados por modelos de visión
-                    # 1. Eliminar bloques de código markdown si el regex falló en quitarlos
-                    json_str = re.sub(r'```json\s*', '', json_str)
-                    json_str = re.sub(r'```', '', json_str)
-                    # 2. Eliminar comentarios estilo // o #
-                    json_str = re.sub(r'//.*', '', json_str)
-                    # 3. Intentar corregir valores no entrecomillados (ej: "ID": 10ABC)
-                    # Buscamos cualquier cosa después de : que no empiece con " y lo envolvemos en comillas
-                    json_str = re.sub(r':\s*(?![{\["\s])(.*?)\s*(?=[\n\r,\]\}])', r': "\1"', json_str)
-                    # 4. Reemplazar comas finales antes de cerrar llave/corchete
-                    json_str = re.sub(r',\s*\}', '}', json_str)
-                    json_str = re.sub(r',\s*\]', ']', json_str)
-                    
-                    try:
-                        extracted = json.loads(json_str)
-                        # Normalizar
-                        extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
-                        # Validar si tenemos algo útil
-                        p = extracted.get("promovente", "").lower()
-                        if p and p not in ("desconocido", "none", "null", ""):
-                            log.info(f"  ✨ Vision OCR exitoso para {pid}")
-                            return extracted
-                    except json.JSONDecodeError as e:
-                        log.error(f"  ❌ Error parseando JSON de Vision: {e}")
-                        log.debug(f"  Cleaned JSON that failed: {json_str!r}")
-                        log.debug(f"  Raw content from model: {content!r}")
+                try:
+                    extracted = json.loads(json_str)
+                    # Normalizar
+                    extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
+                    # Validar si tenemos algo útil
+                    p = extracted.get("promovente", "").lower()
+                    if p and p not in ("desconocido", "none", "null", ""):
+                        log.info(f"  ✨ Vision OCR exitoso para {pid}")
+                        return extracted
+                except json.JSONDecodeError as e:
+                    log.error(f"  ❌ Error parseando JSON de Vision: {e}")
+                    log.debug(f"  Cleaned JSON that failed: {json_str!r}")
         return None
     except Exception as e:
         log.error(f"  ❌ Error crítico en Vision OCR: {e}")
@@ -1459,6 +1545,37 @@ PLACEHOLDER_TERMS = {
     "error de comunicación", "modelo no disponible", "sin datos"
 }
 
+STATE_CODES = {
+    "01": "AGUASCALIENTES", "02": "BAJA CALIFORNIA", "03": "BAJA CALIFORNIA SUR",
+    "04": "CAMPECHE", "05": "COAHUILA", "06": "COLIMA", "07": "CHIAPAS",
+    "08": "CHIHUAHUA", "09": "CIUDAD DE MEXICO", "10": "DURANGO",
+    "11": "GUANAJUATO", "12": "GUERRERO", "13": "HIDALGO", "14": "JALISCO",
+    "15": "MEXICO", "16": "MICHOACAN", "17": "MORELOS", "18": "NAYARIT",
+    "19": "NUEVO LEON", "20": "OAXACA", "21": "PUEBLA", "22": "QUERETARO",
+    "23": "QUINTANA ROO", "24": "SAN LUIS POTOSI", "25": "SINALOA",
+    "26": "SONORA", "27": "TABASCO", "28": "TAMAULIPAS", "29": "TLAXCALA",
+    "30": "VERACRUZ", "31": "YUCATAN", "32": "ZACATECAS"
+}
+
+def audit_record(pid: str, d: dict, log: logging.Logger) -> tuple[int, list[str]]:
+    """
+    Auditor de Calidad (Strategy 2).
+    Verifica consistencia interna y externa.
+    """
+    penalties = []
+    penalty_score = 0
+    
+    # 1. Consistencia del Código de Estado (Pilar de Integridad)
+    pid_state_code = pid[:2]
+    expected_state = STATE_CODES.get(pid_state_code)
+    extracted_state = str(d.get("estado", "")).upper()
+    
+    if expected_state and expected_state not in extracted_state:
+        # Penalización severa por inconsistencia geográfica
+        penalty_score += 25
+        penalties.append(f"state_mismatch: PID is {pid_state_code}({expected_state})")
+        
+    return penalty_score, penalties
 
 def score_record(d: dict) -> tuple[int, list[str]]:
     """
@@ -1489,7 +1606,7 @@ def score_record(d: dict) -> tuple[int, list[str]]:
     return score, deficient
 
 
-def _repair_missing_fields(pid: str, context: str, d: dict,
+async def _repair_missing_fields(pid: str, context: str, d: dict,
                             deficient: list[str], log: logging.Logger) -> dict:
     """
     Intento quirúrgico de reparar campos deficientes con un prompt focalizado.
@@ -1513,7 +1630,7 @@ Texto:
 
 Responde ÚNICAMENTE con un objeto JSON con esos campos. Si no encuentras el valor, deja la cadena vacía."""
 
-    raw = _llm_call(
+    raw = await _llm_call(
         messages=[{"role": "user", "content": repair_prompt}],
         max_tokens=400,
         log=log,
@@ -1537,7 +1654,7 @@ Responde ÚNICAMENTE con un objeto JSON con esos campos. Si no encuentras el val
     return d
 
 
-def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
+async def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
                            context: str, queue: PersistentQueue,
                            log: logging.Logger) -> bool:
     """
@@ -1559,11 +1676,17 @@ def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
     # ── Paso 1: Normalización inicial ────────────────────────────────────
     d = normalize_extracted_data(pid, d)
     score, deficient = score_record(d)
+    
+    # ── Paso 1.5: Auditoría de Calidad (Strategy 2) ───────────────────
+    audit_penalty, audit_notes = audit_record(pid, d, log)
+    if audit_penalty > 0:
+        score -= audit_penalty
+        log.warning(f"    [Audit] {pid} penalización -{audit_penalty} por: {audit_notes}")
 
     log.debug(f"    [Gate-1] {pid} score={score} deficient={deficient}")
 
     # ── Paso 2: Grounding con portal antes de reparar ────────────────────
-    portal_data = fetch_portal_docs(pid, log)
+    portal_data = await fetch_portal_docs(pid, log)
     if portal_data:
         d = ground_data(d, portal_data, log)
         d = normalize_extracted_data(pid, d)
@@ -1573,7 +1696,7 @@ def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
     # ── Paso 3: Reparación quirúrgica si score insuficiente ──────────────
     if score < SCORE_ACCEPT and deficient:
         log.info(f"    [Repair] {pid} score={score} — reparando: {deficient}")
-        d = _repair_missing_fields(pid, context, d, deficient, log)
+        d = await _repair_missing_fields(pid, context, d, deficient, log)
         d = normalize_extracted_data(pid, d)
         score, deficient = score_record(d)
         log.debug(f"    [Gate-3 post-repair] {pid} score={score}")
@@ -1649,15 +1772,9 @@ def _flag_proponent_density(pid: str, d: dict, memory: LocalIntelligenceMemory, 
 BATCH_SIZE = 5   # Procesar en micro-lotes para monitoreo granular
 
 
-def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], str]:
+async def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], str]:
     """
-    Extrae datos para un único QueueItem.
-    Retorna (dict_extraído_o_None, contexto_usado).
-
-    Compuertas previas a la llamada LLM:
-      • El archivo TXT existe y tiene contenido real
-      • El ID del proyecto está realmente en el texto
-      • El contexto extraído tiene densidad semántica suficiente
+    Extrae datos para un único QueueItem asíncronamente.
     """
     txt_path = Path(item.txt_file)
     
@@ -1682,39 +1799,29 @@ def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], str]:
     raw_ctx = txt[max(0, idx - half): idx + half]
     context = re.sub(r'\s+', ' ', raw_ctx).strip()
 
-    # Verificación de densidad: si hay menos de 50 chars únicas, el PDF era basura
+    # Verificación de densidad: si hay menos de 50 chars únicas
     unique_chars = len(set(context.replace(" ", "")))
     if unique_chars < 50:
         log.warning(f"    [Gate-C] Contexto pobre para {item.pid} ({unique_chars} chars únicos) — intentando OCR")
-        vision = extract_with_vision(item.pid, item.year, item.pdf, log)
+        vision = await extract_with_vision(item.pid, item.year, item.pdf, log)
         return vision, context
 
     # Extracción principal con IA
-    extracted = extract_with_ai(item.pid, context, log)
+    extracted = await extract_with_ai(item.pid, context, log)
 
-    # Fallback Vision OCR si el promovente no es convincente
+    # Fallback Vision OCR
     if not extracted or str(extracted.get("promovente", "")).strip().lower() in PLACEHOLDER_TERMS:
         log.info(f"    [Fallback-Vision] {item.pid}")
-        vision = extract_with_vision(item.pid, item.year, item.pdf, log)
+        vision = await extract_with_vision(item.pid, item.year, item.pdf, log)
         if vision:
             extracted = vision
 
     return extracted, context
 
 
-def run_extraction(queue: PersistentQueue, log: logging.Logger):
+async def run_extraction(queue: PersistentQueue, log: logging.Logger):
     """
-    Orquestador de extracción en micro-lotes con validación en cascada.
-
-    Flujo por ítem:
-      1. _extract_single()     → Compuertas de contexto + LLM + Vision fallback
-      2. _validate_and_persist() → Normalizar → Score → Grounding → Reparar → Persistir
-      3. thermal_wait()        → Control térmico entre inferencias
-
-    El procesamiento por micro-lotes (BATCH_SIZE) permite:
-      • Reportar progreso intermedio
-      • Recargar la cola desde disco (detecta items añadidos por otros procesos)
-      • Salir limpiamente ante señales de apagado
+    Orquestador de extracción asíncrona con procesamiento paralelo limitado por semáforo.
     """
     pending = queue.pending()
     if not pending:
@@ -1722,70 +1829,37 @@ def run_extraction(queue: PersistentQueue, log: logging.Logger):
         return
 
     total = len(pending)
-    log.info(f"[Extraction] {total} identifiers — batch_size={BATCH_SIZE}")
+    log.info(f"[Extraction] {total} identifiers — Concurrency mode")
 
-    processed = 0
-
-    # Iteración en micro-lotes
-    for batch_start in range(0, total, BATCH_SIZE):
-        if _shutdown:
-            break
-
-        # Verificar LLM una vez por lote (no por ítem)
-        if not wait_for_llama(log, max_wait=60):
-            log.error("[Pipeline] LLM endpoint unreachable — cycle aborted")
-            break
-
-        batch = pending[batch_start: batch_start + BATCH_SIZE]
-        log.info(f"[Batch {batch_start // BATCH_SIZE + 1}] "
-                 f"Items {batch_start + 1}–{batch_start + len(batch)} / {total}")
-
-        for item in batch:
-            if _shutdown:
-                break
-
+    async def process_item(item):
+        if _shutdown: return
+        async with extraction_semaphore:
             report_state(item.pdf, "EXTRACTING", item.pid)
-            log.info(f"  [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid}")
+            log.info(f"  [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid} (Async)")
 
-            # ── Extracción con compuertas de contexto ─────────────────────
-            extracted, context = _extract_single(item, log)
+            extracted, context = await _extract_single(item, log)
 
             if context == "SKIPPED_BY_MEMORY":
                 queue.mark_success(item.pid)
-                continue
+                return
 
             if extracted is None:
-                # Determinar razón exacta del fallo
                 txt_path = Path(item.txt_file)
-                if not txt_path.exists():
-                    err = "txt_missing"
-                elif item.pid not in txt_path.read_text(errors="replace"):
-                    err = "id_not_in_txt"
-                else:
-                    err = "extraction_failed"
+                err = "extraction_failed"
+                if not txt_path.exists(): err = "txt_missing"
                 log.warning(f"    [Skip] {item.pid}: {err}")
                 queue.mark_attempt(item.pid, error=err)
-                thermal_wait(log)
-                continue
+                return
 
-            # ── Validación, grounding y persistencia ─────────────────────
-            _validate_and_persist(
+            await _validate_and_persist(
                 pid=item.pid, year=item.year, pdf=item.pdf,
                 d=extracted, context=context,
                 queue=queue, log=log,
             )
 
-            processed += 1
-            thermal_wait(log)
+    tasks = [process_item(item) for item in pending]
+    await asyncio.gather(*tasks)
 
-        # ── Resumen de lote ───────────────────────────────────────────────
-        st = queue.stats()
-        log.info(
-            f"[Batch done] OK:{st['success']} Pending:{st['pending']} "
-            f"Failed:{st['failed']} | Processed this run: {processed}/{total}"
-        )
-
-    # ── Resumen global del ciclo ──────────────────────────────────────────
     st = queue.stats()
     report_state("IDLE", "STANDBY", "NONE")
     log.info(
@@ -1834,7 +1908,7 @@ signal.signal(signal.SIGTERM, _handle_signal)
 # ─────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────
-def main():
+async def main():
     # Soporte para argumentos: --year 2024 o --daemon
     if "--daemon" in sys.argv:
         CONFIG["DAEMON_MODE"] = True
@@ -1863,9 +1937,10 @@ def main():
     seen  = SeenGacetas(CONFIG["SEEN_FILE"])
     
     # Inicializar Memoria y Prompts
-    global memory, prompts
+    global memory, prompts, portal_cache
     memory  = LocalIntelligenceMemory(CONFIG["DB_FILE"])
     prompts = PromptManager(CONFIG["PROMPTS_DIR"])
+    portal_cache = PortalMetadataCache(CONFIG["DOCS_DIR"] / "portal_cache.json")
     
     log.info(f"🚀 ZOHAR AGENT v2.2 ACTIVO | Memoria: {memory.get_stats()}")
     log.info(f"  ZOHAR AGENT v2.2  |  Años: {target_years[0]}...{target_years[-1]}  |  DRY_RUN:{CONFIG['DRY_RUN']}")
@@ -1875,7 +1950,7 @@ def main():
 
     CONFIG["DOCS_DIR"].mkdir(parents=True, exist_ok=True)
 
-    def run_cycle():
+    async def run_cycle():
         # ⚡ PRIORIDAD: Extracción de la queue global (IA)
         if not _shutdown:
             run_extraction(queue, log)
@@ -1903,13 +1978,13 @@ def main():
             # 2. Si hay trabajo, procesar SIN DESCANSO
             if pending_count > 0:
                 log.info(f"Initiating extraction cycle: {pending_count} identifiers queued.")
-                run_extraction(queue, log)
+                await run_extraction(queue, log)
                 # Volver al inicio del bucle inmediatamente
                 continue
             
             # 3. Si no hay trabajo de IA, buscar gacetas nuevas
             log.info("Queue empty. Initiating search for new datasets...")
-            run_cycle()
+            await run_cycle()
             
             # 4. Solo dormir si REALMENTE no hay nada más que hacer
             if len(queue.pending()) == 0:
@@ -1917,7 +1992,7 @@ def main():
                 log.info(f"No pending operations. Standby mode active for {CONFIG['POLL_INTERVAL_MIN']} minutes.")
                 for _ in range(poll_s):
                     if _shutdown: break
-                    time.sleep(1)
+                    await asyncio.sleep(1)
     else:
         run_cycle()
 
@@ -1925,4 +2000,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
