@@ -60,7 +60,7 @@ try:
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     gemini_client = None
     if GEMINI_API_KEY:
-        gemini_client = genai.AsyncClient(api_key=GEMINI_API_KEY)
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1beta'})
 except ImportError:
     gemini_client = None
 
@@ -123,7 +123,12 @@ extraction_semaphore = asyncio.Semaphore(5)
 # Inicializar DuckDB (Storage local de alto rendimiento)
 DUCK_DB_FILE = CONFIG["WORK_DIR"] / "zohar_warehouse.duckdb"
 DUCK_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-duck_conn = duckdb.connect(str(DUCK_DB_FILE))
+try:
+    duck_conn = duckdb.connect(str(DUCK_DB_FILE))
+except Exception as e:
+    logging.warning(f"⚠️ DuckDB locked ({e}). Usando modo in-memory para esta sesión.")
+    duck_conn = duckdb.connect(":memory:")
+
 duck_conn.execute("""
     CREATE TABLE IF NOT EXISTS fragments_cache (
         hash TEXT PRIMARY KEY,
@@ -724,6 +729,26 @@ def report_state(pdf: str, action: str, target: str):
     }
     try:
         CONFIG["STATE_FILE"].write_text(json.dumps(state))
+        
+        # Estrategia A: Espejo en Tiempo Real (Heartbeat a Supabase)
+        if supabase_client:
+            def _sync_cloud_state(s):
+                try:
+                    # Usamos id fijo 1 para que sea un registro único de monitoreo
+                    payload = {
+                        "id": 1,
+                        "pdf": s["pdf"],
+                        "action": s["action"],
+                        "target": s["target"],
+                        "last_seen": datetime.datetime.now().isoformat()
+                    }
+                    supabase_client.table("agente_status").upsert(payload, on_conflict="id").execute()
+                except Exception:
+                    pass
+            
+            import threading
+            threading.Thread(target=_sync_cloud_state, args=(state,), daemon=True).start()
+            
     except Exception:
         pass
 
@@ -731,7 +756,7 @@ def report_state(pdf: str, action: str, target: str):
 # ─────────────────────────────────────────────────────────
 # PASO 1: MONITOR — detectar nuevas Gacetas
 # ─────────────────────────────────────────────────────────
-def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[str]:
+async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[str]:
     """
     Descarga el índice de gacetas del año y retorna lista de
     URLs de PDF usando Selenium y Pandas para garantizar recolección.
@@ -739,38 +764,36 @@ def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> list[s
     url = CONFIG["GACETA_LIST_URL"].format(year=year)
     report_state("—", "MONITOREANDO", f"Gaceta {year} (Selenium)")
     log.info(f"🔍 Verificando Gaceta {year} (HTTP First): {url}")
-    html = http_get(url, timeout=60)
     
-    if html is None or "document.write" in html or len(html) < 500:
-        log.warning(f"  ⚠️ HTTP insuficiente o JS detectado, usando Selenium (Heavy)...")
-        try:
-            # Configurar Selenium Chromium Headless
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            # Configuración Robusta para Arch Linux
-            chrome_options.binary_location = '/usr/bin/google-chrome-stable'
-            
-            # Usar binario local para evitar esperas de descarga
-            driver_path = "/usr/bin/chromedriver"
-            if not os.path.exists(driver_path): driver_path = "/usr/local/bin/chromedriver"
-            
-            service = Service(executable_path=driver_path)
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            driver.set_page_load_timeout(45) # Reducir para evitar bloqueos
-            driver.set_script_timeout(15)
-            
-            log.info(f"  🌐 Abriendo Gaceta {year}...")
-            driver.get(url)
-            time.sleep(5) # Esperar renderizado dinámico
-            html = driver.page_source
-            driver.quit()
-        except Exception as e:
-            log.warning(f"  ❌ Fallo total: no se pudo acceder a la Gaceta {year} ({e})")
-            return []
+    async def _get_html():
+        html = http_get(url, timeout=60)
+        
+        if html is None or "document.write" in html or len(html) < 500:
+            log.warning(f"  ⚠️ HTTP insuficiente o JS detectado, usando Selenium (Heavy)...")
+            try:
+                chrome_options = Options()
+                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.binary_location = '/usr/bin/google-chrome-stable'
+                driver_path = "/usr/bin/chromedriver"
+                if not os.path.exists(driver_path): driver_path = "/usr/local/bin/chromedriver"
+                
+                service = Service(executable_path=driver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+                driver.set_page_load_timeout(45)
+                driver.get(url)
+                time.sleep(5)
+                src = driver.page_source
+                driver.quit()
+                return src
+            except Exception as e:
+                log.warning(f"  ❌ Fallo total: no se pudo acceder a la Gaceta {year} ({e})")
+                return None
+        return html
 
-    if html is None or html == "":
+    html = await asyncio.to_thread(_get_html)
+    if not html:
         return []
 
     # Extraer links usando regex
@@ -815,7 +838,7 @@ def pid_in_csv(pid: str) -> bool:
         logging.getLogger("zohar").error(f"  ⚠️ Error verificando PID en CSV: {e}")
         return False
 
-def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
+async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
                 log: logging.Logger) -> int:
     filename = os.path.basename(pdf_url.split("?")[0])
     work_dir = CONFIG["WORK_DIR"] / str(year)
@@ -1953,17 +1976,17 @@ async def main():
     async def run_cycle():
         # ⚡ PRIORIDAD: Extracción de la queue global (IA)
         if not _shutdown:
-            run_extraction(queue, log)
+            await run_extraction(queue, log)
 
         # 🔍 Después del procesamiento, monitorear años para nuevos PDFs
         for year in target_years:
             if _shutdown: break
             log.info(f"Monitoring temporal index for year {year}...")
-            pdf_links = fetch_pdf_links(year, seen, log)
+            pdf_links = await fetch_pdf_links(year, seen, log)
             total_new = 0
             for url in pdf_links:
                 if _shutdown: break
-                n = process_pdf(url, year, queue, log)
+                n = await process_pdf(url, year, queue, log)
                 total_new += n
             if total_new > 0:
                 log.info(f"Ingestion successful: {year}: {total_new} new identifiers cataloged")
@@ -1994,7 +2017,7 @@ async def main():
                     if _shutdown: break
                     await asyncio.sleep(1)
     else:
-        run_cycle()
+        await run_cycle()
 
     log.info("Agent process terminated gracefully.")
 

@@ -88,6 +88,31 @@ async def get_projects():
 
 @app.get("/api/agent_state")
 async def get_agent_state():
+    # Detectar si estamos en Vercel (Cloud Mirror)
+    is_vercel = os.environ.get("VERCEL") == "1"
+    
+    if is_vercel and supabase_client:
+        try:
+            # Obtener el último heartbeat del agente desde la nube
+            res = supabase_client.table("agente_status").select("*").eq("id", 1).execute()
+            if res.data:
+                s = res.data[0]
+                # Convertir formato ISO a legible HH:MM:SS para la UI
+                try:
+                    ts = datetime.datetime.fromisoformat(s["last_seen"]).strftime("%H:%M:%S")
+                except:
+                    ts = "--:--:--"
+                return {
+                    "pdf": s["pdf"],
+                    "action": s["action"],
+                    "target": s["target"],
+                    "time": ts,
+                    "mode": "mirror"
+                }
+        except Exception as e:
+            print(f"Cloud state error: {e}")
+
+    # Comportamiento Local
     if STATE_FILE.exists():
         try:
             return json.loads(STATE_FILE.read_text())
