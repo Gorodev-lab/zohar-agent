@@ -1,1 +1,1 @@
-from .zohar_api import app
+from .main import app
