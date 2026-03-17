@@ -292,6 +292,25 @@
             color: var(--secondary);
             font-size: 20px;
         }
+
+        /* ── RISK & METRICS ── */
+        .risk-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 2px; text-transform: uppercase; }
+        .risk-high { background: rgba(255, 85, 85, 0.15); color: var(--err); border: 1px solid var(--err); }
+        .risk-med  { background: rgba(255, 184, 108, 0.15); color: var(--warn); border: 1px solid var(--warn); }
+        .risk-low  { background: rgba(80, 250, 123, 0.15); color: var(--ok); border: 1px solid var(--ok); }
+        
+        .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .metric-card { background: var(--bg-darker); padding: 12px; border: 1px solid var(--border); text-align: center; border-radius: 4px; }
+        .metric-val { font-size: 16px; font-weight: 700; color: var(--accent); margin: 4px 0; }
+        .metric-label { font-size: 9px; color: var(--secondary); text-transform: uppercase; letter-spacing: 1px; }
+        .metric-limit { font-size: 9px; color: var(--secondary); opacity: 0.7; }
+        
+        .loading-shimmer {
+            background: linear-gradient(90deg, var(--bg-darker) 25%, var(--border) 50%, var(--bg-darker) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     </style>
 </head>
 <body x-data="zoharApp()" x-init="init()" x-cloak>
@@ -384,7 +403,8 @@
                         <thead>
                             <tr>
                                 <th style="width: 140px;">ID_REF / AÑO</th>
-                                <th style="width: 120px;">ESTADO</th>
+                                <th style="width: 100px;">RIESGO</th>
+                                <th style="width: 110px;">ESTADO</th>
                                 <th style="width: 150px;">LOCALIZACIÓN</th>
                                 <th>INSIGHT DE INTEL Y DESCRIPCIÓN</th>
                                 <th style="width: 160px;">ENTIDADES</th>
@@ -392,12 +412,21 @@
                         </thead>
                         <tbody>
                             <template x-for="p in projects" :key="p.ID_PROYECTO">
-                                <tr @click="selectedProject = p" style="cursor:pointer" :class="isNew(p.ID_PROYECTO) ? 'new-row' : ''">
+                                <tr @click="selectProject(p)" style="cursor:pointer" :class="isNew(p.ID_PROYECTO) ? 'new-row' : ''">
                                     <td>
                                         <div class="id-badge" x-text="p.ID_PROYECTO"></div>
                                         <span class="tag tag-year" style="margin-top:4px; display:inline-block;" x-text="p.ANIO"></span>
                                         <template x-if="p.GROUNDED">
                                             <span class="tag tag-grounded" style="margin-left:4px;">VERIFIED</span>
+                                        </template>
+                                    </td>
+                                    <td>
+                                        <!-- Risk heuristic in frontend if not in database yet -->
+                                        <template x-if="p.ID_PROYECTO.includes('E')">
+                                            <span class="risk-badge risk-high">Crítico</span>
+                                        </template>
+                                        <template x-if="!p.ID_PROYECTO.includes('E')">
+                                            <span class="risk-badge risk-low">Seguro</span>
                                         </template>
                                     </td>
                                     <td>
@@ -478,8 +507,53 @@
 
         <div style="margin-bottom:20px;">
             <div class="card-lbl">Resumen de Inteligencia (Insight)</div>
-            <div style="font-size:13px; line-height:1.6; margin-top:8px; color:var(--fg); background:rgba(255,255,255,0.03); padding:10px; border-left:2px solid var(--accent);" 
+            <div style="font-size:12px; line-height:1.6; margin-top:8px; color:var(--fg); background:rgba(255,255,255,0.03); padding:10px; border-left:2px solid var(--primary);" 
                  x-text="selectedProject?.INSIGHT || 'No hay un resumen detallado disponible.'"></div>
+        </div>
+
+        <!-- ENVIRONMENTAL ANALYSIS SECTION -->
+        <div style="margin-bottom:20px; border: 1px solid var(--border); padding: 15px; background: var(--bg-darker);">
+            <div class="card-lbl" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Análisis Ambiental (Ciclo 2026)</span>
+                <template x-if="currentReport">
+                    <span :class="currentReport.risk_score > 20 ? 'risk-badge risk-high' : 'risk-badge risk-low'" 
+                          x-text="currentReport.execution_path"></span>
+                </template>
+            </div>
+
+            <template x-if="loadingReport">
+                <div class="metric-grid">
+                    <div class="metric-card loading-shimmer" style="height:80px"></div>
+                    <div class="metric-card loading-shimmer" style="height:80px"></div>
+                    <div class="metric-card loading-shimmer" style="height:80px"></div>
+                </div>
+            </template>
+
+            <template x-if="currentReport && !loadingReport">
+                <div class="metric-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">SO2 (AVG)</div>
+                        <div class="metric-val" x-text="currentReport.metrics.so2.avg.toFixed(2)"></div>
+                        <div class="metric-limit" x-text="'Lím: ' + currentReport.metrics.so2.limit"></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">NOx (AVG)</div>
+                        <div class="metric-val" x-text="currentReport.metrics.nox.avg.toFixed(2)"></div>
+                        <div class="metric-limit" x-text="'Lím: ' + currentReport.metrics.nox.limit"></div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">PM2.5 (AVG)</div>
+                        <div class="metric-val" x-text="currentReport.metrics.pm25.avg.toFixed(2)"></div>
+                        <div class="metric-limit" x-text="'Lím: ' + currentReport.metrics.pm25.limit"></div>
+                    </div>
+                </div>
+            </template>
+            
+            <template x-if="!currentReport && !loadingReport">
+                <div style="text-align:center; padding: 20px; color: var(--secondary); font-size: 11px;">
+                    [SIN DATOS AMBIENTALES DISPONIBLES EN ESTA REGIÓN]
+                </div>
+            </template>
         </div>
 
         <div>
@@ -508,8 +582,27 @@
                 uptime: '00:00:00',
                 currentTime: '',
                 selectedProject: null,
+                currentReport: null,
+                loadingReport: false,
                 startTime: Date.now(),
                 seenIds: new Set(),
+
+                async selectProject(p) {
+                    this.selectedProject = p;
+                    this.currentReport = null;
+                    this.loadingReport = true;
+                    try {
+                        const h = { 'bypass-tunnel-reminder': 'true' };
+                        const report = await fetch(`/proyectos/${p.ID_PROYECTO}/report`, { headers: h }).then(r => r.json());
+                        if (report && report.metrics) {
+                            this.currentReport = report;
+                        }
+                    } catch (e) {
+                        console.warn('Report fetch failed for', p.ID_PROYECTO);
+                    } finally {
+                        this.loadingReport = false;
+                    }
+                },
 
                 init() {
                     this.updateTime();
