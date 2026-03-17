@@ -196,7 +196,8 @@ async def get_csv_data(type: str = "regulatory"):
     try:
         file_map = {
             "regulatory": BASE_DIR / "ordenamientos_ecologicos_expedidos.csv",
-            "financial": BASE_DIR / "ingresos_2024.csv"
+            "financial": BASE_DIR / "ingresos_2024.csv",
+            "air_quality": BASE_DIR / "d3_aire01_49_1.csv"
         }
         target_file = file_map.get(type)
         if not target_file or not target_file.exists():
