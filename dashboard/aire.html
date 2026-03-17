@@ -463,18 +463,26 @@ async function initMap() {
 async function loadData() {
   try {
     try {
-      // Intentar cargar coordenadas exactas del geocoder (si el archivo existe)
-      const coordRes = await fetch('/api/muni_coords.json'); // o ruta directa si el servidor la da
+      // Intentar cargar coordenadas exactas
+      const coordRes = await fetch('/api/muni_coords.json').catch(() => ({ok:false}));
       if (coordRes.ok) exactCoords = await coordRes.json();
       else {
-        // Fallback probando acceso directo si no hay una ruta api definida
-        const coordResStatic = await fetch('/muni_coords.json');
+        const coordResStatic = await fetch('./muni_coords.json').catch(() => ({ok:false}));
         if (coordResStatic.ok) exactCoords = await coordResStatic.json();
       }
     } catch (e) {}
 
-    const res = await fetch('/api/csv_data?type=air_quality');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Intentar API principal
+    let res = await fetch('/api/csv_data?type=air_quality').catch(() => ({ok:false, status: 'FetchError'}));
+    
+    // Fallback a snapshot estático si el API falla (común en Vercel Serverless)
+    if (!res.ok) {
+      console.warn(`API Principal falló (${res.status}), intentando fallback estático...`);
+      res = await fetch('./aire_snapshot.json').catch(() => ({ok:false, status: 'SnapshotError'}));
+    }
+
+    if (!res.ok) throw new Error(`HTTP ${res.status || 'Offline'}`);
+    
     const raw = await res.json();
     if (!raw || raw.length === 0) throw new Error('Sin datos');
     processData(raw);
@@ -485,12 +493,15 @@ async function loadData() {
 }
 
 function showLoadError(msg) {
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const serverMsg = isLocal ? 'en <span style="color:var(--amber)">localhost:8081</span>' : 'en el servidor de producción';
+  
   document.getElementById('map-loading').innerHTML = `
     <div style="font-size:32px;opacity:0.4">📡</div>
     <div style="color:var(--amber-dim);font-size:11px;text-align:center;max-width:280px">
       ERROR: ${msg}<br><br>
-      Verifica que el servidor API esté corriendo<br>
-      en <span style="color:var(--amber)">localhost:8081</span>
+      Verifica que el motor de datos ZOHAR esté disponible<br>
+      ${serverMsg}
     </div>`;
 }
 
