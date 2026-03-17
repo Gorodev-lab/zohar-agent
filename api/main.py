@@ -200,21 +200,41 @@ async def get_csv_data(type: str = "regulatory"):
     Lee datos. Para aire, lee de DuckDB en lugar del CSV para usar el "grounding" local.
     """
     try:
-        if type == "air_quality":
-            if not DUCK_PATH.exists():
-                return []
-            with duckdb.connect(str(DUCK_PATH)) as d_conn:
-                df = d_conn.execute("SELECT * FROM aire_emisiones").df()
-                # Renombrar para compatibilidad con el frontend
-                df = df.rename(columns={
-                    "entidad": "Entidad_federativa",
-                    "municipio": "Municipio",
-                    "fuente": "Tipo_de_Fuente",
-                    "so2": "SO_2", "co": "CO", "nox": "NOx", "cov": "COV",
-                    "pm10": "PM_010", "pm25": "PM_2_5", "nh3": "NH_3"
-                })
-                df = df.fillna("")
-                return df.to_dict(orient="records")
+        if type == 'air_quality':
+            # Priorizar DuckDB (Estrategia B de Warehouse)
+            if DUCK_PATH.exists():
+                try:
+                    import duckdb
+                    with duckdb.connect(str(DUCK_PATH), read_only=True) as conn:
+                        df = conn.execute("SELECT * FROM aire_emisiones").df()
+                        # Renombrar columnas para compatibilidad UI (el CSV original tiene espacios o nombres largos)
+                        # La UI usa: ['Entidad_federativa', 'Municipio', 'Tipo_de_Fuente', 'SO_2', 'CO', 'NOx', 'COV', 'PM_010', 'PM_2_5', 'NH_3', 'lat', 'lon']
+                        df = df.rename(columns={
+                            "entidad": "Entidad_federativa",
+                            "municipio": "Municipio",
+                            "fuente": "Tipo_de_Fuente",
+                            "so2": "SO_2", "co": "CO", "nox": "NOx", "cov": "COV",
+                            "pm10": "PM_010", "pm25": "PM_2_5", "nh3": "NH_3"
+                        })
+                        df = df.fillna("")
+                        return df.to_dict(orient='records')
+                except Exception as e:
+                    print(f"⚠️ DuckDB error: {e}")
+            
+            # Fallback a Snapshot JSON (Ideal para Vercel)
+            snapshot = DASHBOARD_DIR / "aire_snapshot.json"
+            if snapshot.exists():
+                import json
+                with open(snapshot, 'r') as f:
+                    return json.load(f)
+
+            # Fallback al CSV original (grounding heredado)
+            if not CSV_PATH.exists():
+                raise HTTPException(status_code=404, detail="Fuente de datos no encontrada")
+            
+            import pandas as pd
+            df = pd.read_csv(CSV_PATH)
+            return df.to_dict(orient='records')
         else:
             file_map = {
                 "regulatory":  BASE_DIR / "ordenamientos_ecologicos_expedidos.csv",
