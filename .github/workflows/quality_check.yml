@@ -45,8 +45,12 @@ jobs:
     - name: Run TDD Suite (Red/Green)
       env:
         # Mocking keys for CI environment
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL || '' }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || '' }}
+        SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || '' }}
+        SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || '' }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || '' }}
+        GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || '' }}
+        SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY || '' }}
       run: |
         pytest test_zohar_agent.py test_zohar_api.py

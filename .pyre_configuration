@@ -1,0 +1,18 @@
+{
+  "site_package_search_strategy": "all",
+  "source_directories": [
+    {
+      "import_root": ".",
+      "source": "."
+    }
+  ],
+  "search_path": [
+    "zohar_venv/lib/python3.14/site-packages"
+  ],
+  "exclude": [
+    "zohar_venv/.*",
+    "venv/.*",
+    "\\.git/.*",
+    "__pycache__/.*"
+  ]
+}

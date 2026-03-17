@@ -3,24 +3,24 @@ import sqlite3
 import pandas as pd
 import requests
 import json
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass  # Variables ya deberían estar en el entorno
 
 # Configuración
 HOME = os.path.expanduser("~")
 DB_PATH = os.path.join(HOME, "zohar_intelligence.db")
 CSV_PATH = os.path.join(HOME, "zohar_historico_proyectos.csv")
 
-def get_env():
-    env = {}
-    with open(".env", "r") as f:
-        for line in f:
-            if "=" in line:
-                k, v = line.strip().split("=", 1)
-                env[k] = v
-    return env
+SB_URL = os.environ.get("SUPABASE_URL")
+SB_KEY = os.environ.get("SUPABASE_SECRET_KEY") or os.environ.get("SUPABASE_KEY")
 
-ENV = get_env()
-SB_URL = ENV.get("SUPABASE_URL")
-SB_KEY = ENV.get("SUPABASE_KEY")
+if not SB_URL or not SB_KEY:
+    raise SystemExit("❌ SUPABASE_URL y SUPABASE_KEY deben estar configurados en el entorno o .env")
 
 def sync():
     all_data = []

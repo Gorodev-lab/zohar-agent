@@ -52,7 +52,7 @@ async def get_index():
     index_path = DASHBOARD_DIR / "index.html"
     if index_path.exists():
         return index_path.read_text()
-    return "Dashboard index.html not found"
+    return "Error: No se encontró el archivo index.html del Dashboard"
 
 HEARTBEAT_FILE = HOME / ".zohar_heartbeat"
 
@@ -98,7 +98,7 @@ async def get_agent_state():
         try:
             return json.loads(STATE_FILE.read_text())
         except: pass
-    return {"pdf": "IDLE", "action": "STANDBY", "target": "NONE"}
+    return {"pdf": "INACTIVO", "action": "ESPERA", "target": "NINGUNO"}
 
 @app.get("/api/projects")
 async def get_projects():
@@ -152,7 +152,7 @@ async def get_diagnostics():
     return {
         "ts": datetime.datetime.now().isoformat(),
         "services": stats,
-        "mode": "arch-linux-terminal-mvp"
+        "mode": "arch-linux-terminal-v2"
     }
 
 @app.get("/api/logs")

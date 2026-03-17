@@ -56,12 +56,14 @@ except ImportError:
 try:
     from google import genai
     from google.genai import types
-    from google.genai.errors import ClientError
+    from google.genai.errors import APIError
+    HAS_GEMINI = True
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
     gemini_client = None
     if GEMINI_API_KEY:
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY, http_options={'api_version': 'v1'})
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 except ImportError:
+    HAS_GEMINI = False
     gemini_client = None
 
 # ─────────────────────────────────────────────────────────
@@ -107,6 +109,10 @@ CONFIG: dict[str, Any] = {
     "LLAMA_TIMEOUT":     int(os.environ.get("ZOHAR_LLAMA_TIMEOUT", "300")),
     # Menos contexto para modelos pequeños → menos ruido tabular
     "CONTEXT_CHARS":     int(os.environ.get("ZOHAR_CONTEXT_CHARS", "2500")),
+    
+    # Google Cloud Vision
+    "VISION_API_KEY":    os.environ.get("GEMINI_API_KEY"),
+    "VISION_URL":        "https://vision.googleapis.com/v1/images:annotate",
 
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,
@@ -392,6 +398,7 @@ class LocalIntelligenceMemory:
                 if "auditor_notes" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN auditor_notes TEXT")
                 if "confidence_score" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN confidence_score INTEGER")
                 if "cross_year_link" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN cross_year_link TEXT")
+                if "coordenadas" not in cols: conn.execute("ALTER TABLE projects ADD COLUMN coordenadas TEXT")
 
         except Exception as e:
             logging.getLogger("zohar").error(f"  ❌ Error inicializando DB: {e}")
@@ -465,14 +472,14 @@ class LocalIntelligenceMemory:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO projects 
-                    (pid, year, promovente, proyecto, estado, municipio, sector, insight, reasoning, context_snippet, grounded, sources, confidence_score)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (pid, year, promovente, proyecto, estado, municipio, sector, insight, reasoning, context_snippet, grounded, sources, confidence_score, coordenadas)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     pid, year, d.get("promovente"), d.get("proyecto"), d.get("estado"),
                     d.get("municipio"), d.get("sector"), d.get("insight"),
                     d.get("reasoning"), d.get("context_snippet"),
                     1 if is_grounded else 0, json.dumps(d.get("fuentes_web", [])),
-                    score
+                    score, d.get("COORDENADAS") or d.get("coordenadas")
                 ))
         except Exception as e:
             logging.getLogger("zohar").error(f"  ❌ Error guardando en DB: {e}")
@@ -596,6 +603,7 @@ DEFAULT_EXTRACTION_PROMPT = """\
 Actúa como un Arquitecto de Infraestructura de Inteligencia de Esoteria. Tu misión es convertir datos gubernamentales fragmentados en inteligencia gobernada y fundamentada.
 Eres un experto en análisis forense de documentos. TU CARACTERÍSTICA DEFINITORIA ES LA ESTRUCTURA.
 Eres inmune al ruido tabular, a los IDs de proyectos proximales y a los bucles de alucinación.
+TODA TU SALIDA DEBE SER EN ESPAÑOL.
 </system_instruction>
 
 <schema_definition>
@@ -603,20 +611,21 @@ Eres inmune al ruido tabular, a los IDs de proyectos proximales y a los bucles d
   "PROMOVENTE": "Entidad legal o persona responsable (nombre prístino).",
   "PROYECTO": "Título oficial del proyecto (eliminar encabezados de tabla).",
   "ESTADO": "Nombre completo del estado mexicano (sin abreviaturas).",
-  "MUNICIPIO": "Municipio específico (DEJAR VACÍO si solo se encuentran marcadores como 'ID_PROYECTO').",
+  "MUNICIPIO": "Municipio específico.",
   "LOCALIDAD": "Sitio específico o localidad.",
   "COORDENADAS": "Latitud/Longitud exactamente como están escritas.",
   "POLIGONO": "Vértices geométricos si están disponibles.",
   "SECTOR": "Uno de: [ENERGÍA, MINERÍA, TURISMO, INFRAESTRUCTURA, HIDROCARBUROS, AGROINDUSTRIA, OTROS].",
-  "INSIGHT": "Resumen de Inteligencia Estructurado (2-3 oraciones). Comienza con un VERBO DE ACCIÓN. Enfócate en la arquitectura de riesgo ambiental."
+  "INSIGHT": "Resumen de Inteligencia Estructurado (2-3 oraciones). Comienza con un VERBO DE ACCIÓN en español. Enfócate en la arquitectura de riesgo ambiental."
 }}
 </schema_definition>
 
 <governance_rules>
 1. MANDATO DE FUNDAMENTACIÓN: Cada campo debe derivarse del TEXTO PROPORCIONADO. Si los datos son ambiguos, DÉJALOS VACÍOS.
-2. CERO ALUCINACIÓN: Términos prohibidos (insensible a mayúsculas): [DESCONOCIDO, NA, NULL, ID_PROYECTO, EL ID, NOMBRE ESPECIFICO].
+2. CERO ALUCINACIÓN: Términos prohibidos: [DESCONOCIDO, NA, NULL, ID_PROYECTO, EL ID, NOMBRE ESPECIFICO].
 3. ENFOQUE EN INFRAESTRUCTURA: Extrae para la durabilidad. No adivines. No "resumas" - MODELA los datos.
 4. OBLIGACIÓN DE DOBLE COMILLA: La salida DEBE ser un único objeto JSON. Todas las claves y valores deben estar entre comillas dobles.
+5. IDIOMA: Genera el INSIGHT y cualquier texto descriptivo estrictamente en ESPAÑOL.
 </governance_rules>
 
 <chain_of_thought_analysis>
@@ -625,7 +634,7 @@ Paso 1: Localiza el ancla del proyecto en el texto.
 Paso 2: Aísla la estructura de celdas circundante para separar los encabezados de metadatos de los valores reales.
 Paso 3: Verifica que el 'Promovente' tenga una estructura legal (S.A. de C.V., C.P., etc.) o un nombre personal claro.
 Paso 4: Comprueba el código del Estado desde {pid} (primeros 2 dígitos) con el texto extraído.
-Paso 5: Sintetiza un Insight de alta fidelidad basado en la escala y sector del proyecto.
+Paso 5: Sintetiza un Insight de alta fidelidad en ESPAÑOL basado en la escala y sector del proyecto.
 </chain_of_thought_analysis>
 
 <location_context_snippet>
@@ -637,7 +646,7 @@ Paso 5: Sintetiza un Insight de alta fidelidad basado en la escala y sector del 
 </full_text_context>
 
 REQUERIMIENTO DE SALIDA:
-Genera un bloque detallado de <razonamiento> seguido de un bloque limpio <output_json> que contenga solo el JSON.
+Genera un bloque detallado de <razonamiento> en español seguido de un bloque limpio <output_json> que contenga solo el JSON.
 """
 # ─────────────────────────────────────────────────────────
 # THERMAL MONITOR
@@ -658,7 +667,7 @@ def thermal_wait(log: logging.Logger):
         log.warning(f"🌡️ TEMP CRÍTICA {t}°C → pausa 60s")
         time.sleep(60)
     elif t >= CONFIG["TEMP_WARN"]:
-        log.info(f"🌡️ {t}°C → cool-down {CONFIG['COOL_DOWN_HOT']}s")
+        log.info(f"🌡️ {t}°C → enfriamiento {CONFIG['COOL_DOWN_HOT']}s")
         time.sleep(CONFIG["COOL_DOWN_HOT"])
     else:
         time.sleep(CONFIG["COOL_DOWN_NORMAL"])
@@ -678,14 +687,14 @@ def wait_for_llama(log: logging.Logger, max_wait: int = 90) -> bool:
             with urllib.request.urlopen(health, timeout=30) as r:
                 if r.status == 200:
                     if i > 0:
-                        log.info("LLM infrastructure validation successful")
+                        log.info("Infraestructura de LLM validada con éxito")
                     return True
         except Exception:
             pass
         if i == 0:
-            log.warning("LLM service latency detected - pending response...")
+            log.warning("Latencia detectada en servicio LLM - esperando respuesta...")
         time.sleep(5)
-    log.error("LLM service unavailable (verify: curl http://127.0.0.1:8001/v1/models)")
+    log.error("Servicio LLM no disponible (verificar: curl http://127.0.0.1:8001/v1/models)")
     return False
 
 
@@ -784,7 +793,7 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
         html = http_get(url, timeout=60)
         
         if html is None or "document.write" in html or len(html) < 500:
-            log.warning(f"  ⚠️ HTTP insuficiente o JS detectado, usando Selenium (Heavy)...")
+            log.warning(f"  ⚠️ HTTP insuficiente o JS detectado, usando Selenium (Pesado)...")
             try:
                 chrome_options = Options()
                 chrome_options.add_argument("--headless")
@@ -897,7 +906,7 @@ async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
         if pid in queue._d or pid_in_csv(pid):
             continue
         if queue.add(pid=pid, pdf=filename, year=year, txt_file=str(txt_path)):
-            new_count = new_count + 1
+            new_count += 1
 
     log.info(f"  🆔 {len(ids)} IDs en PDF, {new_count} nuevos en queue")
     return new_count
@@ -1132,7 +1141,7 @@ async def _llm_call(messages: list, max_tokens: int, stop: Optional[List[str]] =
             return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
         if log:
-            log.warning(f"    LLM call error: {e}")
+            log.warning(f"    Error en llamada LLM: {e}")
         return None
 
 
@@ -1153,17 +1162,19 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
     try:
         # Prompt optimizado para Esoteria Intelligence Architecture + Gemini Grounding
         prompt = f"""
-        Act as an Esoteria Senior Intelligence Lead. Your mission is to audit and verify project {pid} 
-        using Google Search to ensure absolute grounding in reality.
+        Actúa como un Líder de Inteligencia Senior de Esoteria. Tu misión es auditar y verificar el proyecto {pid} 
+        utilizando Google Search para asegurar una fundamentación absoluta en la realidad.
+        TODA LA SALIDA DEBE SER EN ESPAÑOL.
 
-        CONTEXT (UNVERIFIED):
+        CONTEXTO (NO VERIFICADO):
         {context}
         
-        GOVERNANCE PROTOCOL:
-        1. If context data is incomplete or ambiguous, use Google Search to find the ACTUAL PROMOVENTE, LOCATION, and SECTOR.
-        2. Provide a 'Structured Intelligence Brief' in the 'insight' field (2-3 sentences starting with an action verb).
-        3. Output MUST be strictly valid JSON.
-        4. GROUNDING MANDATE: Mark as grounded only if external sources verify the existence of the project.
+        PROTOCOLO DE GOBERNANZA:
+        1. Si los datos del contexto están incompletos o son ambiguos, usa Google Search para hallar el PROMOVENTE, UBICACIÓN y SECTOR REALES.
+        2. Proporciona un 'Resumen de Inteligencia Estructurado' en el campo 'insight' (2-3 oraciones que comiencen con un verbo de acción en español).
+        3. LA SALIDA DEBE SER ESTRICTAMENTE JSON VÁLIDO.
+        4. MANDATO DE FUNDAMENTACIÓN: Marca como fundamentado solo si fuentes externas verifican la existencia del proyecto.
+        5. IDIOMA: Genera el insight y todos los campos descriptivos estrictamente en ESPAÑOL.
         
         SCHEMA:
         {{
@@ -1179,23 +1190,43 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
         }}
         """
 
-        google_search_tool = types.Tool(google_search=types.GoogleSearch())
+        # Definición explícita de genai.types.Tool
+        search_tool = types.Tool(
+            google_search=types.GoogleSearch()
+        )
 
         response = gemini_client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
-                tools=[google_search_tool],
-                response_mime_type="application/json"
+                tools=[search_tool]
             )
         )
 
-        extracted = json.loads(response.text)
+        raw = response.text
+        
+        # Extracción JSON robusta para evitar "Expecting value: line 1 column 1"
+        json_match = None
+        m = re.search(r'```json\s*(.*?)\s*```', raw, re.DOTALL)
+        if m:
+            json_match = m.group(1).strip()
+        
+        if not json_match:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                json_match = raw[start : end + 1].strip()
+
+        if not json_match:
+            log.warning("    Gemini devolvió una estructura inválida, recurriendo a Mistral.")
+            return None
+
+        extracted = json.loads(json_match)
         if isinstance(extracted, list) and len(extracted) > 0:
             extracted = extracted[0]
-        
+            
         if not isinstance(extracted, dict):
-            log.warning(f"    Gemini returned invalid format: {type(extracted)}")
+            log.warning(f"    Gemini devolvió un formato inválido: {type(extracted)}")
             return None
 
         # Normalizar claves y valores (convertir a str excepto listas de fuentes)
@@ -1208,7 +1239,7 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
         fuentes = []
         if response.candidates and response.candidates[0].grounding_metadata:
             meta = response.candidates[0].grounding_metadata
-            log.debug(f"    [Gemini-Grounding] Metadata found: {meta}")
+            log.debug(f"    [Gemini-Grounding] Metadatos hallados: {meta}")
             
             # Opción 1: grounding_chunks
             if meta.grounding_chunks:
@@ -1259,7 +1290,7 @@ async def _extract_with_ai_async(pid: str, context: str, log: logging.Logger, pd
             return extracted
 
     # ── FALLBACK: Mistral Local (PASO 1 + PASO 2) ────────────────────────
-    log.info(f"    🔄 Falling back to Local Inference (Mistral) for {pid}")
+    log.info(f"    🔄 Recurriendo a Inferencia Local (Mistral) para {pid}")
     
     # Cargar prompts dinámicamente
     loc_finder_template = prompts.get_prompt("location_finder", DEFAULT_LOC_FINDER) if prompts else DEFAULT_LOC_FINDER
@@ -1296,7 +1327,7 @@ async def _extract_with_ai_async(pid: str, context: str, log: logging.Logger, pd
         )
 
         if not raw:
-            log.warning(f"    Inference anomaly (attempt {attempt})")
+            log.warning(f"    Anomalía de inferencia (intento {attempt})")
             time.sleep(3 * attempt)
             continue
 
@@ -1347,11 +1378,11 @@ async def _extract_with_ai_async(pid: str, context: str, log: logging.Logger, pd
                 
                 return cleaned
             except json.JSONDecodeError as e:
-                log.debug(f"    JSON Auditor Alert (attempt {attempt}): {e} — snippet: {str(json_match)[:100]!r}")
+                log.debug(f"    Alerta del Auditor JSON (intento {attempt}): {e} — fragmento: {str(json_match)[:100]!r}")
                 time.sleep(2)
                 continue
 
-        log.debug(f"    No JSON block found in response (attempt {attempt})")
+        log.debug(f"    No se encontró bloque JSON en la respuesta (intento {attempt})")
         time.sleep(2)
 
     return None
@@ -1487,82 +1518,50 @@ def download_document(pid: str, doc_url: str, doc_type: str, log: logging.Logger
 
 
 async def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.Logger) -> Optional[dict]:
-    """Extrae datos usando Qwen2-VL (Vision) si el texto está muy roto o es ilegible."""
+    """Extrae datos usando Gemini Vision (multimodal) para OCR + Análisis."""
+    if not gemini_client:
+        return None
+        
     try:
         work_dir = CONFIG["WORK_DIR"] / str(year)
         pdf_path = work_dir / pdf_name
         if not pdf_path.exists(): return None
         
-        log.info(f"  👁️  Activando OCR Vision (Qwen2-VL) para {pid}...")
+        log.info(f"  👁️  Activando Gemini Vision para {pid}...")
         
-        # Guard para dependencias de vision
         if 'convert_from_path' not in globals():
-            log.warning("  ⚠️ OCR Vision abortado: pdf2image/poppler no disponible en este entorno")
+            log.warning("  ⚠️ pdf2image/poppler no disponible")
             return None
 
-        # Convertir las primeras páginas (donde suelen estar las tablas)
-        # Ajustamos DPI a 150 para balancear calidad y velocidad en el AMD A8
-        images = convert_from_path(str(pdf_path), first_page=1, last_page=3, dpi=150)
+        images = convert_from_path(str(pdf_path), first_page=1, last_page=3, dpi=200)
         
+        full_text = ""
         for i, img in enumerate(images):
-            # Redimensionar para no saturar memoria
-            img.thumbnail((1200, 1200)) 
+            img.thumbnail((2000, 2000))
             from io import BytesIO
             buf = BytesIO()
             img.save(buf, format="JPEG", quality=85)
-            img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            img_bytes = buf.getvalue()
             
-            payload = {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"Actúa como un Auditor de Visión Forense de Esoteria. Analiza esta imagen de la Gaceta SEMARNAT y extrae inteligencia para el proyecto {pid}. Genera ÚNICAMENTE un objeto JSON válido. RESTRICCIÓN: Todos los valores deben ser cadenas entre comillas dobles. Si un valor es desconocido, usa una cadena vacía. LLAVES: PROMOVENTE, PROYECTO, ESTADO, MUNICIPIO, RIESGO, DESCRIPCION. Sin markdown, sin explicaciones. TODO EN ESPAÑOL."},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                        ]
-                    }
-                ],
-                "max_tokens": 600
-            }
+            # Gemini Vision (modelo 2.0-flash o superior)
+            img_part = types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
+            response = gemini_client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=["Extrae el texto de esta página de la Gaceta SEMARNAT.", img_part]
+            )
             
-            try:
-                async with httpx.AsyncClient(timeout=180.0) as client:
-                    resp = await client.post(CONFIG["OCR_URL"], json=payload)
-                    resp.raise_for_status()
-                    res = resp.json()
-            except Exception as e:
-                log.error(f"  ❌ OCR API Error: {e}")
-                return None
+            if response.text:
+                full_text += f"\n--- PÁGINA {i+1} ---\n{response.text}"
 
-            content = res["choices"][0]["message"]["content"]
-            
-            # Extraer JSON con regex robusta
-            m = re.search(r"(\{[\s\S]*\})", content)
-            if m:
-                json_str = m.group(1).strip()
-                # Limpieza agresiva de caracteres comunes mal formados por modelos de visión
-                json_str = re.sub(r'```json\s*', '', json_str)
-                json_str = re.sub(r'```', '', json_str)
-                json_str = re.sub(r'//.*', '', json_str)
-                json_str = re.sub(r':\s*(?![{\["\s])(.*?)\s*(?=[\n\r,\]\}])', r': "\1"', json_str)
-                json_str = re.sub(r',\s*\}', '}', json_str)
-                json_str = re.sub(r',\s*\]', ']', json_str)
-                
-                try:
-                    extracted = json.loads(json_str)
-                    # Normalizar
-                    extracted = {k.lower().strip(): str(v).strip() for k, v in extracted.items()}
-                    # Validar si tenemos algo útil
-                    p = extracted.get("promovente", "").lower()
-                    if p and p not in ("desconocido", "none", "null", ""):
-                        log.info(f"  ✨ Vision OCR exitoso para {pid}")
-                        return extracted
-                except json.JSONDecodeError as e:
-                    log.error(f"  ❌ Error parseando JSON de Vision: {e}")
-                    log.debug(f"  Cleaned JSON that failed: {json_str!r}")
-        return None
+        if not full_text:
+            log.warning(f"  ⚠️ No se obtuvo inteligencia visual para {pid}")
+            return None
+
+        log.info(f"  🧠 Procesando texto de visión con Gemini para {pid}...")
+        return await _extract_with_ai_async(pid, full_text, log)
+
     except Exception as e:
-        log.error(f"  ❌ Error crítico en Vision OCR: {e}")
+        log.error(f"  ❌ Error crítico en Vision Pipeline: {e}")
         return None
 
 
@@ -1638,26 +1637,26 @@ def score_record(d: dict) -> tuple[int, list[str]]:
     Un score ≥ 60 es suficiente para persistir.
     Un score ≥ 80 es de alta confianza.
     """
-    score: int = 0
+    score_val: int = 0
     deficient: List[str] = []
 
     for field, weight in FIELD_WEIGHTS.items():
         val = str(d.get(field, "")).strip().lower()
         if val and val not in PLACEHOLDER_TERMS and len(val) > 2:
-            score = score + int(weight)
+            score_val += int(weight)
         else:
             deficient.append(field)
 
     # Bonus: insight largo y específico
     insight = str(d.get("insight", "")).strip()
     if len(insight) > 80:
-        score = min(100, int(score) + 5)
+        score_val = min(100, score_val + 5)
 
     # Bonus: coordenadas o polígono presentes
     if d.get("coordenadas") or d.get("poligono"):
-        score = min(100, int(score) + 5)
+        score_val = min(100, score_val + 5)
 
-    return score, deficient
+    return score_val, deficient
 
 
 async def _repair_missing_fields(pid: str, context: str, d: dict,
@@ -1769,7 +1768,7 @@ async def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
         if memory:
             dup = memory.find_semantic_duplicate(d.get("proyecto", ""), d.get("promovente", ""))
             if dup and dup["pid"] != pid:
-                log.info(f"    [Trace] Linked to previous intelligence: {dup['pid']} ({dup['year']})")
+                log.info(f"    [Traza] Vinculado a inteligencia previa: {dup['pid']} ({dup['year']})")
                 d["reasoning"] = (d.get("reasoning", "") + 
                                 f" [INTELLIGENCE_LINK: Re-aparición de proyecto {dup['pid']} del año {dup['year']}]").strip()
                 # Marcar para el dashboard
@@ -1834,7 +1833,7 @@ async def _extract_single(item, log: logging.Logger) -> tuple[Optional[dict], st
     
     # ── COMPUERTA DE MEMORIA (Cap. 16) ───────────────────────────
     if memory and memory.project_exists(item.pid):
-        log.info(f"    [Memory] {item.pid} found in local intelligence — skipping")
+        log.info(f"    [Memoria] {item.pid} hallado en inteligencia local — omitiendo")
         return None, "SKIPPED_BY_MEMORY"
 
     # Gate A: archivo existe
@@ -1883,12 +1882,12 @@ async def run_extraction(queue: PersistentQueue, log: logging.Logger):
         return
 
     total = len(pending)
-    log.info(f"[Extraction] {total} identifiers — Concurrency mode")
+    log.info(f"[Extracción] {total} identificadores — Modo concurrente")
 
     async def process_item(item):
         if _shutdown: return
         async with extraction_semaphore:
-            report_state(item.pdf, "EXTRACTING", item.pid)
+            report_state(item.pdf, "EXTRAYENDO", item.pid)
             log.info(f"  [{item.attempts + 1}/{CONFIG['MAX_RETRIES']}] {item.pid} (Async)")
 
             extracted, context = await _extract_single(item, log)
@@ -1915,10 +1914,10 @@ async def run_extraction(queue: PersistentQueue, log: logging.Logger):
     await asyncio.gather(*tasks)
 
     st = queue.stats()
-    report_state("IDLE", "STANDBY", "NONE")
+    report_state("INACTIVO", "ESPERA", "NINGUNO")
     log.info(
-        f"[Extraction complete] Total:{st['total']} "
-        f"OK:{st['success']} Pending:{st['pending']} Failed:{st['failed']}"
+        f"[Extracción completada] Total:{st['total']} "
+        f"OK:{st['success']} Pendientes:{st['pending']} Fallidos:{st['failed']}"
     )
 
 

@@ -5,8 +5,8 @@ After=network.target zohar-llama.service zohar-ocr.service zohar-api.service
 [Service]
 Type=simple
 User=gorops
-WorkingDirectory=/home/gorops/zohar-agent
-ExecStart=/home/gorops/zohar-agent/zohar_venv/bin/python agent/zohar_agent_v2.py --daemon
+WorkingDirectory=/home/gorops/proyectos antigravity/zohar-agent
+ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" agent/zohar_agent_v2.py --daemon
 Restart=always
 RestartSec=30
 StartLimitIntervalSec=0

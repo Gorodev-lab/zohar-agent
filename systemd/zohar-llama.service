@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=gorops
-WorkingDirectory=/home/gorops/zohar-agent
-ExecStart=/home/gorops/zohar-agent/zohar_venv/bin/python -m llama_cpp.server --model /home/gorops/models/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf --port 8001 --n_ctx 4096 --n_gpu_layers 33
+WorkingDirectory=/home/gorops/proyectos antigravity/zohar-agent
+ExecStart="/home/gorops/proyectos antigravity/zohar-agent/zohar_venv/bin/python" -m llama_cpp.server --model /home/gorops/models/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf --port 8001 --n_ctx 4096 --n_gpu_layers 33
 Restart=always
 RestartSec=10
 
