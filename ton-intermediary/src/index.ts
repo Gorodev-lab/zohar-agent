@@ -3,20 +3,24 @@ import { serializeTONL, chunkTONL } from './utils/tonl.js';
 import { Address } from 'ton-core';
 import dotenv from 'dotenv';
 import { ZoharProject } from './types/zohar.js';
+import { TransactionDispatcher } from './utils/dispatcher.js';
 
 dotenv.config();
 
 /**
  * ★ Insight ─────────────────────────────────────
- * El "Guardián de Determinismo" actúa como la última línea de defensa. 
- * Al filtrar por el ciclo 2026 antes de la serialización, eliminamos la 
- * latencia de procesamiento de datos obsoletos, asegurando que el 
- * Intermediario solo orqueste transacciones vigentes sobre la red TON.
+ * La arquitectura de "Despacho Dual" separa las responsabilidades: 
+ * Node.js gestiona la infraestructura de red TON y la validación de 
+ * seguridad, mientras que Python provee la inteligencia analítica. 
+ * Esto permite escalar el Agente sin comprometer la custodia de llaves.
  */
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PYTHON_API_BASE = process.env.PYTHON_API_BASE || 'http://localhost:8081';
+const TON_ENDPOINT = process.env.TON_ENDPOINT || 'https://toncenter.com/api/v2/jsonRPC';
+
+const dispatcher = new TransactionDispatcher(TON_ENDPOINT);
 
 app.use(express.json());
 
@@ -29,24 +33,31 @@ app.get('/agent/sync/:pid', async (req: Request, res: Response) => {
         
         const data: ZoharProject = await response.json();
 
-        // --- Guardián de Determinismo (Ciclo 2026) ---
+        // 1. Guardián de Determinismo
         if (data.year && data.year !== 2026) {
-            console.warn(`[REJECT] Project ${pid} excluded: Cycle mismatch (${data.year})`);
             return res.status(403).send("ERR:OUT_OF_CURRENT_CYCLE_2026");
         }
 
-        // --- Capa de Agregación y Compactación ---
-        const optimizedPayload = serializeTONL(data);
-
-        // --- Handling de Batches si el payload es masivo ---
-        if (optimizedPayload.length > 2000) {
-            const chunks = chunkTONL(optimizedPayload);
-            res.setHeader('X-Batch-Mode', 'Chunked');
-            return res.json({ batches: chunks.length, data: chunks });
+        // 2. Generar Reporte Ambiental HITL (Vía Python)
+        const reportResponse = await fetch(`${PYTHON_API_BASE}/proyectos/${pid}/report`);
+        if (reportResponse.ok) {
+            data.environmental_report = await reportResponse.json();
         }
+
+        // 3. Orquestación del Despacho TON
+        let dispatchResult = null;
+        if (data.environmental_report) {
+            dispatchResult = await dispatcher.dispatch(data.environmental_report);
+        }
+
+        // 4. Compactación TONL para storage/LLM
+        const optimizedPayload = serializeTONL(data);
         
-        res.setHeader('X-Format', 'TONL-1.1-DENSITY');
-        res.send(optimizedPayload);
+        res.json({
+            tonl: optimizedPayload,
+            dispatch: dispatchResult,
+            standard: "TONL-1.2-HITL"
+        });
         
     } catch (error) {
         console.error(`Error syncing ${pid}:`, error);
@@ -54,14 +65,6 @@ app.get('/agent/sync/:pid', async (req: Request, res: Response) => {
     }
 });
 
-/**
- * @deprecated Los endpoints que devuelven JSON crudo sin agregación ambiental 
- * han sido marcados como ineficientes.
- */
-app.get('/legacy/fetch/:pid', (req, res) => {
-    res.status(410).send("DEPRECATED: Use /agent/sync/:pid instead.");
-});
-
 app.listen(PORT, () => {
-    console.log(`🛡️ Guardián Zohar (2026) activo en puerto ${PORT}`);
+    console.log(`🛡️ Intermediario HITL Zohar activo en puerto ${PORT}`);
 });

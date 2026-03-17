@@ -6,6 +6,7 @@ import urllib.request
 import datetime
 import json
 import subprocess
+import duckdb
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,7 @@ app = FastAPI(title="Zohar Intelligence API")
 HOME = Path(os.path.expanduser("~"))
 BASE_DIR = Path(__file__).parent.parent
 DB_PATH = HOME / "zohar_intelligence.db"
+DUCK_PATH = HOME / "gaceta_work" / "zohar_warehouse.duckdb"
 CSV_PATH = HOME / "zohar_historico_proyectos.csv"
 STATE_FILE = HOME / "zohar_agent_state.json"
 QUEUE_FILE = BASE_DIR / "agent" / "zohar_queue.json"
@@ -45,14 +47,16 @@ app.add_middleware(
 )
 
 # Servir Frontend
-app.mount("/dashboard", StaticFiles(directory=str(DASHBOARD_DIR)), name="dashboard")
-
 @app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
 async def get_index():
     index_path = DASHBOARD_DIR / "index.html"
     if index_path.exists():
         return index_path.read_text()
     return "Error: No se encontró el archivo index.html del Dashboard"
+
+# Mount para archivos estáticos internos (si los hubiera)
+# app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 HEARTBEAT_FILE = HOME / ".zohar_heartbeat"
 
@@ -115,6 +119,73 @@ async def get_projects():
     except Exception as e:
         print(f"Error fetching projects: {e}")
         return []
+
+@app.get("/proyectos/{pid}")
+async def get_project_detail(pid: str):
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.row_factory = sqlite3.Row
+            res = conn.execute("SELECT * FROM projects WHERE pid = ?", (pid,)).fetchone()
+            if not res:
+                raise HTTPException(status_code=404, detail="Proyecto no hallado")
+            return dict(res)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/proyectos/{pid}/report")
+async def get_project_report(pid: str):
+    try:
+        # 1. Obtener ubicación del proyecto
+        with sqlite3.connect(DB_PATH) as conn:
+            res = conn.execute("SELECT municipio, year FROM projects WHERE pid = ?", (pid,)).fetchone()
+            if not res: raise HTTPException(status_code=404, detail="Proyecto no hallado")
+            municipio, year = res
+
+        # 2. Consultar DuckDB para el reporte ambiental
+        # (Usamos lógica directa para simplificar sin re-importar la clase entera del agente)
+        with duckdb.connect(str(DUCK_PATH)) as d_conn:
+            # Agregación
+            agg = d_conn.execute("""
+                SELECT AVG(so2), MAX(so2), AVG(nox), MAX(nox), AVG(pm2_5), MAX(pm2_5)
+                FROM air_quality_emissions WHERE municipio ILIKE ?
+            """, (f"%{municipio}%",)).fetchone()
+            
+            if not agg or agg[0] is None:
+                return {"pid": pid, "execution_path": "SKIPPED_NO_DATA"}
+
+            data = {
+                "avg": {"so2": round(agg[0], 2), "nox": round(agg[2], 2), "pm25": round(agg[4], 2)},
+                "max": {"so2": round(agg[1], 2), "nox": round(agg[3], 2), "pm25": round(agg[5], 2)}
+            }
+
+            # Lógica de reporte
+            THRESHOLDS = {"so2": 40.0, "nox": 70.0, "pm25": 25.0}
+            violations = []
+            risk_score = 0
+            for m, limit in THRESHOLDS.items():
+                current = data["avg"].get(m, 0)
+                if current > limit:
+                    pct = ((current - limit) / limit) * 100
+                    violations.append({"metric": m, "value": current, "limit": limit, "excess_pct": round(pct, 2)})
+                    risk_score += pct
+
+            path = "AUTONOMOUS"
+            if violations and any(float(v["excess_pct"]) > 20.0 for v in violations):
+                path = "CRITICAL_SIGNATURE_REQUIRED"
+            elif risk_score > 50.0:
+                path = "CRITICAL_SIGNATURE_REQUIRED"
+            
+            return {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "cycle_2026": year == 2026,
+                "pid": pid,
+                "metrics": data,
+                "violations": violations,
+                "risk_score": round(risk_score, 2),
+                "execution_path": path
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/diagnostics")
 async def get_diagnostics():

@@ -1,21 +1,27 @@
 /**
  * ★ Insight ─────────────────────────────────────
- * El tipado estricto asegura que los datos agregados (promedios y máximos) 
- * mantengan la precisión decimal necesaria para el oráculo ambiental, 
- * evitando desbordamientos en la serialización TONL.
+ * El tipado estricto asegura que los reportes de cumplimiento ambiental 
+ * se sincronicen sin pérdida de precisión. La inclusión de 'execution_path' 
+ * permite al Intermediario decidir de forma determinista la ruta de 
+ * ejecución (Highload vs. TON Connect).
  */
 
-export interface AggregatedEmissions {
-    avg: {
-        so2: number;
-        nox: number;
-        pm25: number;
+export interface EnvironmentalReport {
+    timestamp: string;
+    cycle_2026: boolean;
+    pid: string;
+    metrics: {
+        avg: Record<string, number>;
+        max: Record<string, number>;
     };
-    max: {
-        so2: number;
-        nox: number;
-        pm25: number;
-    };
+    violations: Array<{
+        metric: string;
+        value: number;
+        limit: number;
+        excess_pct: number;
+    }>;
+    risk_score: number;
+    execution_path: 'AUTONOMOUS' | 'CRITICAL_SIGNATURE_REQUIRED';
 }
 
 export interface ZoharProject {
@@ -27,8 +33,7 @@ export interface ZoharProject {
     score: number;
     grounding_status: "verified" | "unverified" | "rejected";
     year?: number;
-    fechas_consulta?: string;
-    emisiones_agregadas?: AggregatedEmissions;
+    environmental_report?: EnvironmentalReport;
 }
 
 export interface TONTransactionRequest {

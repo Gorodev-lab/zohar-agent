@@ -759,6 +759,45 @@ class AirQualityAdvisor:
         except Exception:
             return {}
 
+    def generate_environmental_report(self, municipio: str, project_id: str) -> dict:
+        """Genera un reporte ejecutivo con lógica de despacho dual (HITL)."""
+        data = self.get_aggregated_emissions(municipio)
+        if not data: 
+            return {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "cycle_2026": True,
+                "pid": project_id,
+                "execution_path": "SKIPPED_NO_DATA"
+            }
+
+        # Límites NOM (Placeholders técnicos)
+        # NOM-025-SSA1-2021: PM2.5 límite anual 10 µg/m³ (usamos 25 como límite de alerta 24h)
+        THRESHOLDS = {"so2": 40.0, "nox": 70.0, "pm25": 25.0}
+        violations = []
+        risk_score = 0
+
+        for m, limit in THRESHOLDS.items():
+            current = data["avg"].get(m, 0)
+            if current > limit:
+                excess_pct = ((current - limit) / limit) * 100
+                violations.append({"metric": m, "value": current, "limit": limit, "excess_pct": round(excess_pct, 2)})
+                risk_score += excess_pct
+
+        # Regla de Negocio: >20% exceso en cualquier métrica -> Firma Manual
+        path = "AUTONOMOUS"
+        if any(v["excess_pct"] > 20 for v in violations) or risk_score > 50:
+            path = "CRITICAL_SIGNATURE_REQUIRED"
+
+        return {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "cycle_2026": True,
+            "pid": project_id,
+            "metrics": data,
+            "violations": violations,
+            "risk_score": round(risk_score, 2),
+            "execution_path": path
+        }
+
 # Instancias Globales
 memory: Optional[LocalIntelligenceMemory] = None
 prompts: Optional[PromptManager] = None

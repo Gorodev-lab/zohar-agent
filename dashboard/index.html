@@ -3,424 +3,216 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZOHAR :: OPERACIONES DE TERMINAL ARCH-LINUX</title>
+    <title>ZOHAR // INTELLIGENCE SYSTEM</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Geist & Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Geist+Mono:wght@300;400&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Geist Mono', 'monospace'],
+                    },
+                    colors: {
+                        abisal: '#050505',
+                        violet_glow: 'rgba(139, 92, 246, 0.5)',
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
-        :root {
-            --bg: #0d0f11;
-            --bg-darker: #08090a;
-            --fg: #d1d5db;
-            --primary: #1793d1; /* Arch Blue */
-            --secondary: #5a5a5a;
-            --accent: #00ffcc;
-            --err: #ff5555;
-            --warn: #ffb86c;
-            --ok: #50fa7b;
-            --border: #1f2226;
-            --font: 'Fira Code', 'Courier New', monospace;
-        }
-
         [x-cloak] { display: none !important; }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; cursor: default; }
-
+        
         body {
-            background-color: var(--bg);
-            color: var(--fg);
-            font-family: var(--font);
-            font-size: 13px;
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+            background-color: #050505;
+            color: #d4d4d8; /* zinc-300 */
         }
 
-        /* ── TOP NAV ── */
-        header {
-            background: var(--bg-darker);
-            border-bottom: 2px solid var(--primary);
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 100;
+        .cyber-border {
+            border: 1px solid rgba(255, 255, 255, 0.03);
         }
 
-        .sys-info {
-            display: flex;
-            gap: 24px;
-            align-items: center;
+        .glass-card {
+            background: rgba(255, 255, 255, 0.01);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.02);
         }
 
-        .stat-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .stat-label {
-            font-size: 10px;
-            color: var(--secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .stat-value {
-            font-weight: 700;
-            color: var(--primary);
-        }
-
-        .pulse {
-            width: 8px;
-            height: 8px;
-            background: var(--ok);
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-            box-shadow: 0 0 8px var(--ok);
-            animation: blink 1.5s infinite;
-        }
-
-        @keyframes blink {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
-
-        /* ── MAIN LAYOUT ── */
-        main {
-            flex: 1;
-            display: grid;
-            grid-template-columns: 350px 1fr 300px;
-            gap: 2px;
-            background: var(--border);
-            overflow: hidden;
-        }
-
-        section {
-            background: var(--bg);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .panel-header {
-            background: var(--bg-darker);
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--border);
-            color: var(--primary);
-            font-weight: 700;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .panel-content {
-            flex: 1;
-            padding: 12px;
-            overflow-y: auto;
-        }
-
-        /* ── TERMINAL STREAM ── */
-        .terminal {
-            background: var(--bg-darker);
-            font-size: 11px;
-            line-height: 1.5;
-            padding: 15px;
-            color: #ccc;
-        }
-
-        .log-line {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 4px;
-        }
-
-        .log-ts { color: var(--secondary); white-space: nowrap; }
-        .log-lvl { font-weight: 700; width: 50px; text-align: right; }
-        .lvl-info { color: var(--primary); }
-        .lvl-warn { color: var(--warn); }
-        .lvl-err  { color: var(--err); }
-        .log-msg { color: var(--fg); }
-
-        /* ── DATA GRID ── */
-        .grid-container {
-            border: 1px solid var(--border);
-        }
-
-        table {
+        .scanline {
             width: 100%;
-            border-collapse: collapse;
-            font-size: 11px;
-        }
-
-        th {
-            background: var(--bg-darker);
-            color: var(--secondary);
-            text-align: left;
-            padding: 10px;
-            font-weight: 400;
-            border-bottom: 1px solid var(--border);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        td {
-            padding: 10px;
-            border-bottom: 1px solid var(--border);
-            vertical-align: top;
-        }
-
-        tr:hover {
-            background: rgba(23, 147, 209, 0.08);
-        }
-
-        .new-row {
-            animation: rowHighlight 2s ease-out;
-        }
-
-        @keyframes rowHighlight {
-            0% { background: rgba(23, 147, 209, 0.3); }
-            100% { background: transparent; }
-        }
-
-        .id-badge {
-            color: var(--primary);
-            font-weight: 700;
-            font-family: 'Fira Code';
-        }
-
-        .tag {
-            font-size: 9px;
-            padding: 2px 5px;
-            border: 1px solid;
-            border-radius: 2px;
-            text-transform: uppercase;
-        }
-
-        .tag-grounded { border-color: var(--accent); color: var(--accent); background: rgba(0, 255, 204, 0.1); }
-        .tag-year { border-color: var(--secondary); color: var(--fg); }
-        .coords { font-size: 10px; color: var(--accent); margin-top: 4px; display: block; }
-        .insight-text { font-size: 11px; line-height: 1.4; color: var(--fg); }
-        .entity-name { font-weight: 700; color: var(--primary); margin-bottom: 2px; }
-
-        /* ── PROGRESS BARS ── */
-        .progress-container {
-            margin-top: 15px;
-        }
-
-        .progress-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 10px;
-            margin-bottom: 4px;
-        }
-
-        .progress-bg {
-            height: 4px;
-            background: var(--border);
-            width: 100%;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: var(--primary);
-            transition: width 0.3s;
-        }
-
-        /* ── ANALYTICS CARDS ── */
-        .card {
-            background: var(--bg-darker);
-            border: 1px solid var(--border);
-            padding: 12px;
-            margin-bottom: 12px;
-        }
-
-        .card-val {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--primary);
-        }
-
-        .card-lbl {
-            font-size: 10px;
-            color: var(--secondary);
-            text-transform: uppercase;
-        }
-
-        /* ── FOOTER ── */
-        footer {
-            background: var(--bg-darker);
-            border-top: 1px solid var(--border);
-            padding: 5px 20px;
-            font-size: 10px;
-            color: var(--secondary);
-            display: flex;
-            justify-content: space-between;
-        }
-
-        /* ── GROUNDED DATA POPUP ── */
-        .popup {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 600px;
-            max-height: 80vh;
-            background: var(--bg-darker);
-            border: 1px solid var(--primary);
-            box-shadow: 0 0 40px rgba(0,0,0,0.9);
-            padding: 25px;
-            z-index: 1000;
-            overflow-y: auto;
-        }
-
-        .popup-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7);
-            z-index: 999;
-        }
-
-        .popup-close {
+            height: 100px;
+            z-index: 10;
+            background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(255, 255, 255, 0.02) 50%, rgba(0, 0, 0, 0) 100%);
+            opacity: 0.1;
             position: absolute;
-            top: 10px;
-            right: 15px;
-            cursor: pointer;
-            color: var(--secondary);
-            font-size: 20px;
+            bottom: 100%;
+            animation: scanline 8s linear infinite;
         }
+
+        @keyframes scanline {
+            0% { bottom: 100%; }
+            100% { bottom: -100px; }
+        }
+
+        .glow-pulse {
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+            animation: glow-pulse 2s infinite;
+        }
+
+        @keyframes glow-pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.6; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Hide Scrollbar */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body x-data="zoharApp()" x-init="init()" x-cloak>
+<body x-data="zoharApp()" x-init="init()" x-cloak class="font-mono overflow-hidden h-screen flex flex-col antialiased">
 
-    <header>
-        <div class="sys-info">
-            <div style="display: flex; align-items: center;">
-                <span class="pulse"></span>
-                <span style="font-weight: 700; letter-spacing: 2px;">ZOHAR//CORE</span>
+    <!-- Ambient Glow BG -->
+    <div class="fixed inset-0 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-violet-900/10 via-transparent to-transparent pointer-events-none"></div>
+    <div class="scanline"></div>
+
+    <!-- Header Ejecutivo -->
+    <header class="relative z-20 h-16 border-b border-white/[0.03] bg-black/40 backdrop-blur-md px-8 flex items-center justify-between">
+        <div class="flex items-center gap-10">
+            <div class="flex items-center gap-4">
+                <div class="w-1.5 h-6 bg-violet-600 shadow-[0_0_15px_rgba(139,92,246,0.5)]"></div>
+                <span class="text-zinc-100 font-sans font-bold tracking-[0.3em] uppercase text-xl">
+                    Zohar <span class="text-violet-400/80 font-light">// Core</span>
+                </span>
             </div>
-            <div class="stat-item">
-                <span class="stat-label">Modo del Sistema</span>
-                <span class="stat-value">ARCH_TERMINAL_V2</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Temp CPU</span>
-                <span class="stat-value" x-text="status.cpu_temp || '--°C'"></span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Estado del Agente</span>
-                <span class="stat-value" :style="status.agent_running ? 'color:var(--ok)' : 'color:var(--err)'" 
-                      x-text="status.agent_running ? 'ACTIVO' : 'INACTIVO'"></span>
+            
+            <div class="hidden md:flex items-center gap-8 text-[11px] tracking-wider text-zinc-500 uppercase">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-3.5 h-3.5 text-violet-500/60"></i>
+                    <span>System Temp</span>
+                    <span class="text-zinc-100 italic font-mono" x-text="status.cpu_temp || '00°C'"></span>
+                </div>
+                <div class="flex items-center gap-2 border-l border-white/10 pl-8">
+                    <i data-lucide="database" class="w-3.5 h-3.5 text-violet-500/60"></i>
+                    <span>DuckDB Warehouse</span>
+                    <span class="text-zinc-100" x-text="status.agent_running ? 'Online' : 'Offline'"></span>
+                </div>
             </div>
         </div>
-        <div class="sys-info">
-            <div class="stat-item" style="text-align: right;">
-                <span class="stat-label">Tiempo Activo</span>
-                <span class="stat-value" x-text="uptime"></span>
+
+        <div class="flex items-center gap-8">
+            <div class="flex items-center gap-3">
+                <span class="text-[10px] uppercase tracking-widest text-zinc-600">State</span>
+                <div class="flex items-center gap-2 px-3 py-1 bg-emerald-500/[0.03] border border-emerald-500/20 rounded-full">
+                    <div class="relative w-1.5 h-1.5">
+                        <div class="absolute inset-0 bg-emerald-500 rounded-full glow-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                    </div>
+                    <span class="text-[10px] font-bold text-emerald-500/90 tracking-widest leading-none" x-text="status.agent_running ? 'OPERATIONAL' : 'DORMANT'"></span>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="text-[10px] uppercase tracking-[0.2em] text-zinc-600 block mb-0.5">Uptime</span>
+                <span class="text-zinc-200 text-sm font-light tracking-widest font-mono" x-text="uptime"></span>
             </div>
         </div>
     </header>
 
-    <main>
-        <!-- LEFT: Operations & Queue -->
-        <section style="border-right: 1px solid var(--border);">
-            <div class="panel-header">
-                <span>[01] MONITOR_DE_OPERACIONES</span>
-            </div>
-            <div class="panel-content">
-                <div class="card">
-                    <span class="card-lbl">Acción Actual</span>
-                    <div style="font-size: 14px; color: var(--warn); margin-top: 5px;" x-text="agent.action || 'ESPERA'"></div>
-                </div>
-                <div class="card">
-                    <span class="card-lbl">PDF de Origen</span>
-                    <div style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 5px;" x-text="agent.pdf || 'N/A'"></div>
-                </div>
-                <div class="card">
-                    <span class="card-lbl">ID de Objetivo</span>
-                    <div class="stat-value" x-text="agent.target || 'NINGUNO'"></div>
-                </div>
-
-                <div class="progress-container">
-                    <div class="progress-label">
-                        <span>Pipeline de Ingesta</span>
-                        <span x-text="(diag.services?.queue?.progress_pct || 0) + '%'"></span>
-                    </div>
-                    <div class="progress-bg">
-                        <div class="progress-fill" :style="'width:' + (diag.services?.queue?.progress_pct || 0) + '%'"></div>
-                    </div>
-                </div>
-
-                <div style="margin-top: 20px;">
-                    <div class="panel-header" style="background:transparent; padding:0; margin-bottom:10px;">
-                        <span>ESTADÍSTICAS_DE_COLA</span>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <div class="card">
-                            <span class="card-lbl">Éxito</span>
-                            <div class="card-val" style="color:var(--ok)" x-text="diag.services?.queue?.success || 0"></div>
+    <!-- Main Grid Layout -->
+    <main class="relative z-10 flex-1 grid grid-cols-12 gap-8 p-8 overflow-hidden">
+        
+        <!-- COLUMN 01: MONITOR -->
+        <section class="col-span-3 flex flex-col gap-8 h-full">
+            <div class="flex flex-col h-full">
+                <h2 class="text-[10px] font-sans uppercase tracking-[0.25em] text-zinc-500 mb-4 px-1">01 // ORCHESTRATION</h2>
+                <div class="glass-card p-6 flex-1 flex flex-col justify-between overflow-y-auto scrollbar-hide">
+                    <div class="space-y-6">
+                        <div>
+                            <span class="text-[10px] uppercase text-zinc-600 block mb-2 tracking-widest">Active Pipeline</span>
+                            <div class="text-zinc-100 flex items-center justify-between">
+                                <span class="text-xs uppercase tracking-widest font-mono" x-text="agent.action || 'IDLE'"></span>
+                                <i data-lucide="zap" class="w-3.5 h-3.5 text-violet-500"></i>
+                            </div>
                         </div>
-                        <div class="card">
-                            <span class="card-lbl">Pendientes</span>
-                            <div class="card-val" x-text="diag.services?.queue?.pending || 0"></div>
+
+                        <div>
+                            <span class="text-[10px] uppercase text-zinc-600 block mb-2 tracking-widest">Target Document</span>
+                            <div class="text-zinc-300 text-xs truncate font-mono" x-text="agent.pdf || 'N/A'"></div>
+                        </div>
+                        
+                        <div class="space-y-2 pt-4">
+                            <div class="flex justify-between text-[10px] uppercase tracking-wider">
+                                <span class="text-zinc-500">Processing Load</span>
+                                <span class="text-violet-400/80 font-mono" x-text="(diag.services?.queue?.progress_pct || 0) + '%'"></span>
+                            </div>
+                            <div class="h-[2px] w-full bg-white/[0.02]">
+                                <div class="h-full bg-gradient-to-r from-violet-600 to-indigo-500 transition-all duration-1000" :style="'width:' + (diag.services?.queue?.progress_pct || 0) + '%'"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-8 grid grid-cols-2 gap-4">
+                        <div class="p-4 bg-white/[0.01] border border-white/[0.02] rounded-sm">
+                            <span class="text-[9px] text-zinc-600 block mb-1 uppercase tracking-widest">Success</span>
+                            <span class="text-xl text-zinc-100 font-light font-mono" x-text="diag.services?.queue?.success || 0"></span>
+                        </div>
+                        <div class="p-4 bg-white/[0.01] border border-white/[0.02] rounded-sm">
+                            <span class="text-[9px] text-zinc-600 block mb-1 uppercase tracking-widest">Queue</span>
+                            <span class="text-xl text-violet-400 font-light font-mono" x-text="diag.services?.queue?.pending || 0"></span>
                         </div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- CENTER: Real-time Ledger -->
-        <section>
-            <div class="panel-header">
-                <span>[02] LIBRO_DE_INTELIGENCIA_VERIFICADA</span>
-                <span x-text="projects.length + ' FILAS'"></span>
-            </div>
-            <div class="panel-content" style="padding:0;">
-                <div class="grid-container">
-                    <table>
-                        <thead>
+        <!-- COLUMN 02: INTELLIGENCE LEDGER -->
+        <section class="col-span-6 flex flex-col h-full overflow-hidden">
+            <h2 class="text-[10px] font-sans uppercase tracking-[0.25em] text-zinc-500 mb-4 px-1">02 // GROUNDING_LEDGER</h2>
+            <div class="glass-card flex-1 flex flex-col overflow-hidden">
+                <div class="p-4 border-b border-white/[0.02] flex justify-between items-center bg-white/[0.01]">
+                    <div class="flex items-center gap-4">
+                        <i data-lucide="search" class="w-3.5 h-3.5 text-zinc-700"></i>
+                        <input type="text" placeholder="FILTER_LEDGER_DATA..." class="bg-transparent border-none outline-none text-[11px] text-zinc-400 w-64 placeholder:text-zinc-800 font-mono tracking-widest uppercase">
+                    </div>
+                    <i data-lucide="shield" class="w-4 h-4 text-violet-500/20"></i>
+                </div>
+
+                <div class="flex-1 overflow-auto scrollbar-hide">
+                    <table class="w-full text-[11px] text-left">
+                        <thead class="sticky top-0 bg-[#070707] text-zinc-600 uppercase tracking-widest border-b border-white/[0.05] z-10">
                             <tr>
-                                <th style="width: 140px;">ID_REF / AÑO</th>
-                                <th style="width: 120px;">ESTADO</th>
-                                <th style="width: 150px;">LOCALIZACIÓN</th>
-                                <th>INSIGHT DE INTEL Y DESCRIPCIÓN</th>
-                                <th style="width: 160px;">ENTIDADES</th>
+                                <th class="px-6 py-4 font-normal">Ident_ID</th>
+                                <th class="px-6 py-4 font-normal">Project_Entity_Description</th>
+                                <th class="px-6 py-4 font-normal text-right">Status</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="divide-y divide-white/[0.01]">
                             <template x-for="p in projects" :key="p.ID_PROYECTO">
-                                <tr @click="selectedProject = p" style="cursor:pointer" :class="isNew(p.ID_PROYECTO) ? 'new-row' : ''">
-                                    <td>
-                                        <div class="id-badge" x-text="p.ID_PROYECTO"></div>
-                                        <span class="tag tag-year" style="margin-top:4px; display:inline-block;" x-text="p.ANIO"></span>
-                                        <template x-if="p.GROUNDED">
-                                            <span class="tag tag-grounded" style="margin-left:4px;">VERIFIED</span>
-                                        </template>
-                                    </td>
-                                    <td>
-                                        <div style="color:var(--accent); font-weight:700; text-transform:uppercase; font-size:10px;" x-text="p.ESTADO"></div>
-                                    </td>
-                                    <td>
-                                        <div style="color:var(--fg); font-weight:700" x-text="p.MUNICIPIO"></div>
-                                        <template x-if="p.COORDENADAS">
-                                            <span class="coords" x-text="p.COORDENADAS"></span>
-                                        </template>
-                                        <template x-if="!p.COORDENADAS">
-                                            <span class="coords" style="color:var(--secondary); opacity:0.5;">[SIN_COORD]</span>
-                                        </template>
-                                    </td>
-                                    <td>
-                                        <div class="insight-text">
-                                            <strong style="color:var(--accent); display:block; margin-bottom:2px;" x-text="p.PROYECTO"></strong>
-                                            <span x-text="p.INSIGHT || p.PROYECTO"></span>
+                                <tr @click="selectedProject = p" class="group hover:bg-white/[0.02] transition-colors cursor-pointer border-b border-white/[0.01]">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex flex-col gap-1 text-[10px]">
+                                            <span class="text-violet-400/80 group-hover:text-violet-300 font-mono" x-text="p.ID_PROYECTO"></span>
+                                            <span class="text-zinc-600" x-text="p.ANIO || '2026'"></span>
                                         </div>
                                     </td>
-                                    <td>
-                                        <div class="entity-name" x-text="p.PROMOVENTE"></div>
-                                        <div style="font-size:9px; color:var(--secondary);" x-text="p.SECTOR || 'NO_sector_detectado'"></div>
+                                    <td class="px-6 py-4">
+                                        <div class="text-zinc-400 group-hover:text-zinc-200 truncate max-w-lg transition-colors font-mono uppercase tracking-tight" x-text="p.PROYECTO"></div>
+                                        <span class="text-[9px] text-zinc-600 uppercase" x-text="p.MUNICIPIO + ', ' + (p.ESTADO || 'MÉXICO')"></span>
+                                    </td>
+                                    <td class="px-6 py-4 text-right">
+                                        <span :class="p.GROUNDED ? 'border-emerald-500/20 text-emerald-500/80' : 'border-zinc-500/20 text-zinc-500/80'" 
+                                              class="text-[9px] px-2 py-0.5 rounded-sm border uppercase tracking-widest font-bold bg-white/[0.01]" 
+                                              x-text="p.GROUNDED ? 'VERIFIED' : 'PENDING'"></span>
                                     </td>
                                 </tr>
                             </template>
@@ -430,73 +222,98 @@
             </div>
         </section>
 
-        <!-- RIGHT: Activity Stream -->
-        <section style="border-left: 1px solid var(--border);">
-            <div class="panel-header">
-                <span>[03] FLUJO_DE_ACTIVIDAD</span>
-            </div>
-            <div class="panel-content terminal" id="logConsole">
-                <template x-for="log in agentLogs">
-                    <div class="log-line">
-                        <span class="log-ts" x-text="log.ts.slice(11, 19)"></span>
-                        <span class="log-lvl" :class="'lvl-' + log.level.toLowerCase()" x-text="log.level.slice(0,3)"></span>
-                        <span class="log-msg" x-text="log.msg"></span>
+        <!-- COLUMN 03: EVENT STREAM -->
+        <section class="col-span-3 flex flex-col gap-8 h-full">
+            <h2 class="text-[10px] font-sans uppercase tracking-[0.25em] text-zinc-500 mb-4 px-1">03 // EVENT_STREAM</h2>
+            <div class="glass-card flex-1 p-6 flex flex-col overflow-hidden bg-black/40">
+                <div class="flex-1 overflow-auto space-y-4 font-mono text-[10px] scrollbar-hide" id="logConsole">
+                    <template x-for="log in agentLogs">
+                        <div class="flex gap-4 group opacity-80 hover:opacity-100 transition-opacity">
+                            <span class="text-zinc-700 shrink-0 font-light" x-text="log.ts.slice(11, 19)"></span>
+                            <span :class="{
+                                'text-emerald-500': log.level === 'INF',
+                                'text-amber-500 font-bold': log.level === 'WAR',
+                                'text-rose-500 font-bold': log.level === 'ERR',
+                                'text-zinc-600': log.level === 'DEB'
+                            }" class="shrink-0" x-text="log.level"></span>
+                            <span class="text-zinc-500 group-hover:text-zinc-300 leading-relaxed break-all" x-text="log.msg"></span>
+                        </div>
+                    </template>
+                    <div class="animate-pulse text-zinc-800 flex items-center gap-2 pt-2">
+                        <div class="w-1 h-3 bg-zinc-800"></div>
+                        <span class="tracking-widest">LISTENING_FOR_SYNC_CYCLES...</span>
                     </div>
-                </template>
+                </div>
             </div>
         </section>
     </main>
 
-    <footer>
-        <span>HOST: archlinux-zohar-v2 // PIPELINE_ACTIVO: TRUE // RECOLECCIÓN_DE_INTEL: ACTIVA</span>
-        <span x-text="currentTime"></span>
-        <span>ZOHAR INTEL v2.3 // SOLO DATOS FUNDAMENTADOS</span>
+    <!-- Footer Minimalista -->
+    <footer class="relative z-20 h-10 border-t border-white/[0.03] bg-black/60 backdrop-blur-md px-8 flex items-center justify-between text-[9px] text-zinc-600 uppercase tracking-[0.2em] font-sans">
+        <div class="flex gap-12">
+            <span class="flex items-center gap-2">
+                <i data-lucide="layers" class="w-3 h-3 text-violet-500/50"></i>
+                Zohar Architecture v2.3.4
+            </span>
+            <span class="flex items-center gap-2">
+                <div class="w-1 h-1 bg-violet-600 rounded-full"></div>
+                Llama-Grounding Active
+            </span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span class="italic text-zinc-700">Gaceta Ecológica Intel - 2026 Cycle</span>
+            <i data-lucide="shield" class="w-3 h-3"></i>
+        </div>
     </footer>
 
-    <!-- PROJECT DETAIL VIEW (Popup) -->
-    <div class="popup-overlay" x-show="selectedProject" @click="selectedProject = null" x-transition x-cloak></div>
-    <div class="popup" x-show="selectedProject" x-transition x-cloak>
-        <span class="popup-close" @click="selectedProject = null">&times;</span>
-        <div style="color:var(--primary); font-weight:700; font-size:18px; margin-bottom:5px;" x-text="selectedProject?.ID_PROYECTO"></div>
-        <div style="color:var(--secondary); font-size:11px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:10px;">
-            PAQUETE_DE_INTEL_VERIFICADO // AÑO: <span x-text="selectedProject?.ANIO"></span>
-        </div>
-        
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px;">
-            <div>
-                <div class="card-lbl">Datos de Geolocalización</div>
-                <div style="margin-top:5px;">
-                    <div style="font-size:13px; font-weight:700;" x-text="selectedProject?.ESTADO + ', ' + selectedProject?.MUNICIPIO"></div>
-                    <div class="coords" style="font-size:12px;" x-text="selectedProject?.COORDENADAS || '[EXTRACCIÓN_PENDIENTE]'"></div>
+    <!-- POPUP DETALLES -->
+    <template x-if="selectedProject">
+        <div class="fixed inset-0 z-[100] flex items-center justify-center p-8">
+            <div @click="selectedProject = null" class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+            <div class="relative glass-card w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col rounded-sm">
+                <div class="p-8 border-b border-white/[0.03] flex justify-between items-start bg-white/[0.01]">
+                    <div class="space-y-1">
+                        <span class="text-violet-400 font-mono text-xs tracking-widest" x-text="selectedProject.ID_PROYECTO"></span>
+                        <h3 class="text-zinc-100 font-sans font-bold text-xl uppercase tracking-tighter" x-text="selectedProject.PROYECTO"></h3>
+                    </div>
+                    <button @click="selectedProject = null" class="text-zinc-600 hover:text-white transition-colors">
+                        <i data-lucide="x" class="w-6 h-6"></i>
+                    </button>
+                </div>
+                <div class="p-8 overflow-y-auto space-y-8 scrollbar-hide text-zinc-400 text-sm leading-relaxed">
+                    <div class="grid grid-cols-2 gap-8">
+                        <div>
+                            <span class="text-[10px] text-zinc-600 block mb-2 uppercase tracking-widest">Geolocation</span>
+                            <div class="font-mono text-zinc-200" x-text="selectedProject.ESTADO + ', ' + selectedProject.MUNICIPIO"></div>
+                            <div class="text-[10px] text-violet-500/60 mt-1 font-mono tracking-widest" x-text="selectedProject.COORDENADAS || '[GRID_EXTRACTION_PENDING]'"></div>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-zinc-600 block mb-2 uppercase tracking-widest">Entity_Promovente</span>
+                            <div class="font-bold text-zinc-200 uppercase tracking-tight" x-text="selectedProject.PROMOVENTE"></div>
+                            <div class="text-[10px] text-zinc-500 mt-1" x-text="'Sector: ' + (selectedProject.SECTOR || 'CIVIL_ENGINEERING')"></div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-white/[0.03] pt-8">
+                        <span class="text-[10px] text-zinc-600 block mb-4 uppercase tracking-widest">Intelligence_Insight</span>
+                        <div class="bg-white/[0.01] border-l-2 border-violet-600 p-6 italic font-sans text-zinc-200 text-base" x-text="selectedProject.INSIGHT || 'Intelligence summary being synthesized by Zohar Core...'"></div>
+                    </div>
+
+                    <div class="border-t border-white/[0.03] pt-8">
+                        <span class="text-[10px] text-zinc-600 block mb-4 uppercase tracking-widest">Verified_Sources</span>
+                        <div class="space-y-2">
+                             <template x-if="!selectedProject.SOURCES || JSON.parse(selectedProject.SOURCES).length === 0">
+                                <span class="text-zinc-600 italic text-xs">No external sources verified for this specific audit cycle.</span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-white/[0.03] flex justify-end">
+                    <button @click="selectedProject = null" class="px-6 py-2 bg-violet-600/10 border border-violet-600/30 text-violet-400 text-[10px] uppercase tracking-[0.2em] hover:bg-violet-600/20 transition-all">Close_Buffer</button>
                 </div>
             </div>
-            <div>
-                <div class="card-lbl">Entidad Responsable</div>
-                <div style="margin-top:5px; font-size:13px; font-weight:700; color:var(--primary)" x-text="selectedProject?.PROMOVENTE"></div>
-                <div style="font-size:11px; color:var(--secondary)" x-text="'Sector: ' + (selectedProject?.SECTOR || 'N/A')"></div>
-            </div>
         </div>
-
-        <div style="margin-bottom:20px;">
-            <div class="card-lbl">Resumen de Inteligencia (Insight)</div>
-            <div style="font-size:13px; line-height:1.6; margin-top:8px; color:var(--fg); background:rgba(255,255,255,0.03); padding:10px; border-left:2px solid var(--accent);" 
-                 x-text="selectedProject?.INSIGHT || 'No hay un resumen detallado disponible.'"></div>
-        </div>
-
-        <div>
-            <div class="card-lbl">Citaciones y Fuentes de Fundamentación</div>
-            <div style="margin-top:10px; font-size:11px;">
-                <template x-if="selectedProject?.SOURCES">
-                    <template x-for="src in JSON.parse(selectedProject.SOURCES)">
-                        <a :href="src.uri" target="_blank" style="display:block; color:var(--accent); text-decoration:none; margin-bottom:6px; padding:5px; border:1px solid var(--border); overflow:hidden; text-overflow:ellipsis;" x-text="src.title || src.uri"></a>
-                    </template>
-                </template>
-                <template x-if="!selectedProject?.SOURCES || JSON.parse(selectedProject.SOURCES).length === 0">
-                    <span style="color:var(--secondary); font-style:italic;">No se han verificado fuentes externas en este ciclo.</span>
-                </template>
-            </div>
-        </div>
-    </div>
+    </template>
 
     <script>
         function zoharApp() {
@@ -507,31 +324,22 @@
                 agentLogs: [],
                 diag: {},
                 uptime: '00:00:00',
-                currentTime: '',
                 selectedProject: null,
                 startTime: Date.now(),
-                seenIds: new Set(),
 
                 init() {
-                    this.updateTime();
+                    lucide.createIcons();
                     this.fetchData();
                     this.fetchDiag();
                     setInterval(() => this.updateTime(), 1000);
-                    setInterval(() => this.fetchData(), 3000);
+                    setInterval(() => {
+                        this.fetchData();
+                        this.$nextTick(() => lucide.createIcons());
+                    }, 3000);
                     setInterval(() => this.fetchDiag(), 5000);
                 },
 
-                isNew(id) {
-                    if (!this.seenIds.has(id) && this.seenIds.size > 0) {
-                        return true;
-                    }
-                    return false;
-                },
-
                 updateTime() {
-                    const now = new Date();
-                    this.currentTime = now.toLocaleTimeString('en-US', { hour12: false });
-                    
                     const diff = Math.floor((Date.now() - this.startTime) / 1000);
                     const h = Math.floor(diff / 3600).toString().padStart(2, '0');
                     const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
@@ -548,46 +356,24 @@
                             fetch('/api/projects', { headers: h }).then(r => r.json()),
                             fetch('/api/logs', { headers: h }).then(r => r.json().catch(() => []))
                         ]);
-
                         this.status = s;
                         this.agent = a;
                         this.projects = p;
-                        this.agentLogs = l.slice(-50);
-
-                        // Actualizar seenIds
-                        if (this.projects) {
-                            this.projects.forEach(proj => {
-                                if (!this.seenIds.has(proj.ID_PROYECTO)) {
-                                    // Podríamos hacer algo especial aquí si quisiéramos
-                                }
-                            });
-                            
-                            // Después de mostrar los "nuevos", los agregamos al set
-                            // Para la primera carga, los agregamos todos de una para que no parpadeen
-                            if (this.seenIds.size === 0) {
-                                this.projects.forEach(proj => this.seenIds.add(proj.ID_PROYECTO));
-                            } else {
-                                // En cargas subsiguientes, damos un tiempo para que se vea la animación
-                                setTimeout(() => {
-                                    this.projects.forEach(proj => this.seenIds.add(proj.ID_PROYECTO));
-                                }, 5000);
-                            }
-                        }
-
+                        this.agentLogs = l.slice(-40).reverse();
+                        
                         this.$nextTick(() => {
                             const el = document.getElementById('logConsole');
-                            if (el) el.scrollTop = el.scrollHeight;
+                            // In this layout we keep the scroll at top because we reverse logs for event stream feel
                         });
                     } catch (e) {
-                        console.warn('Network loss or API unreachable:', e.message);
+                        console.warn('API sync lost:', e.message);
                     }
                 },
 
                 async fetchDiag() {
                     try {
                         const h = { 'bypass-tunnel-reminder': 'true' };
-                        const d = await fetch('/api/diagnostics', { headers: h }).then(r => r.json());
-                        this.diag = d;
+                        this.diag = await fetch('/api/diagnostics', { headers: h }).then(r => r.json());
                     } catch (e) {}
                 }
             }
