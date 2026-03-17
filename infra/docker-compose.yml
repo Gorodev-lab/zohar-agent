@@ -1,0 +1,54 @@
+version: "3.9"
+
+# ╔══════════════════════════════════════════════════════╗
+# ║  ZOHAR — CONTAINERIZED DATABASE INFRASTRUCTURE     ║
+# ║  Uso: docker compose up -d                         ║
+# ║  PG local dev: postgresql://zohar:@localhost:5432  ║
+# ╚══════════════════════════════════════════════════════╝
+
+services:
+
+  # ── PostgreSQL Local (dev/test) ──────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: zohar_pg
+    environment:
+      POSTGRES_DB:       zohar_intelligence
+      POSTGRES_USER:     zohar
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-zohardev2026}
+    ports:
+      - "5432:5432"
+    volumes:
+      - zohar_pg_data:/var/lib/postgresql/data
+      - ./infra/init:/docker-entrypoint-initdb.d:ro   # ← Schema como código
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zohar -d zohar_intelligence"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── pgAdmin UI ───────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: zohar_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL:    admin@zohar.local
+      PGADMIN_DEFAULT_PASSWORD: ${PG_PASSWORD:-zohardev2026}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    volumes:
+      - zohar_pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  zohar_pg_data:
+  zohar_pgadmin_data:
+
+networks:
+  default:
+    name: zohar_network

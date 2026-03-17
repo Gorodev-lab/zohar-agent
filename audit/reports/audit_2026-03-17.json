@@ -1,0 +1,953 @@
+{
+  "generated_at": "2026-03-17T12:00:34.001827",
+  "year_filter": null,
+  "completeness": {
+    "total_rows": 206,
+    "null_pct": {
+      "pid": 0.0,
+      "year": 0.0,
+      "promovente": 0.0,
+      "proyecto": 0.0,
+      "estado": 0.0,
+      "municipio": 0.0,
+      "sector": 1.0,
+      "insight": 0.0,
+      "reasoning": 98.1,
+      "context_snippet": 100.0,
+      "grounded": 0.0,
+      "sources": 0.0,
+      "audit_status": 0.0,
+      "auditor_notes": 100.0,
+      "confidence_score": 0.0,
+      "cross_year_link": 100.0,
+      "created_at": 0.0,
+      "coordenadas": 7.8
+    },
+    "critical_cols": {
+      "reasoning": 98.1,
+      "context_snippet": 100.0,
+      "auditor_notes": 100.0,
+      "cross_year_link": 100.0
+    },
+    "score": 77.4
+  },
+  "grounding": {
+    "grounded_pct": 96.6,
+    "coords_pct": 92.2,
+    "riesgo_pct": 0.0,
+    "grounded_count": 199,
+    "coords_count": 190
+  },
+  "consistency": {
+    "issues": [],
+    "is_clean": true
+  },
+  "freshness": {
+    "oldest_days": 0,
+    "newest_days": -1,
+    "avg_age_days": -0.7,
+    "stale_count": 0
+  },
+  "by_year": [
+    {
+      "year": 2025,
+      "count": 177,
+      "grounded": 172,
+      "avg_score": 100.0
+    },
+    {
+      "year": 2026,
+      "count": 29,
+      "grounded": 27,
+      "avg_score": 97.1
+    }
+  ],
+  "sectors": {
+    "by_sector": [
+      {
+        "sector_nombre": "INFRAESTRUCTURA CARRETERA",
+        "n_proyectos": 11,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO",
+        "n_proyectos": 8,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES P\u00c9TREOS",
+        "n_proyectos": 7,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIAL P\u00c9TREO",
+        "n_proyectos": 5,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINERO",
+        "n_proyectos": 5,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINER\u00cdA",
+        "n_proyectos": 5,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA SOLAR FOTOVOLTAICA",
+        "n_proyectos": 5,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA DE TRANSPORTE",
+        "n_proyectos": 4,
+        "avg_score": 96.25,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO Y TUR\u00cdSTICO",
+        "n_proyectos": 3,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA VIAL",
+        "n_proyectos": 3,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA",
+        "n_proyectos": 2,
+        "avg_score": 92.5,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO / TUR\u00cdSTICO",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO HABITACIONAL",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA SOLAR",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA (GENERACI\u00d3N EL\u00c9CTRICA)",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINER\u00cdA (HIERRO)",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "RESIDENCIAL",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TRANSPORTE FERROVIARIO",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TUR\u00cdSTICO",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "SIN_SECTOR",
+        "n_proyectos": 2,
+        "avg_score": 92.5,
+        "pct_grounded": 0.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO RESIDENCIAL",
+        "n_proyectos": 2,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "COMUNICACIONES Y TRANSPORTES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "COMERCIO MINORISTA / FARMACIA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "COMERCIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "BANCA M\u00daLTIPLE / SERVICIOS FINANCIEROS",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AVIACI\u00d3N/INFRAESTRUCTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ALMACENAMIENTO TEMPORAL DE PESCADO / ACOPIO Y REFRIGERACI\u00d3N DE RECURSO PESQUERO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AGUA POTABLE Y ALCANTARILLADO (DRENAJE PLUVIAL)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AGUA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AGR\u00cdCOLA (CULTIVO DE UVA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AGROPECUARIO Y GANADERO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AGRICULTURAL/AGROINDUSTRY",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "AGRICULTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ADMINISTRACI\u00d3N DE TIERRAS COMUNALES / DESARROLLO IND\u00cdGENA",
+        "n_proyectos": 1,
+        "avg_score": 90.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ACUACULTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ABASTECIMIENTO DE AGUA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "COMERCIAL / INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "COMERCIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "CIENCIA Y ASTRONOM\u00cdA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "BIENES RA\u00cdCES / DESARROLLO INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERGIA RENOVABLE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO Y TUR\u00cdSTICO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO TUR\u00cdSTICO-HABITACIONAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ECOTURISMO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO RESIDENCIAL/INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO / INFRAESTRUCTURA VIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "CONSTRUCCI\u00d3N Y MATERIALES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "CONSTRUCCI\u00d3N RESIDENCIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "COMUNICACIONES Y TRANSPORTES (V\u00cdAS GENERALES DE COMUNICACI\u00d3N)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 0.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA SOLAR / FOTOVOLTAICO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA SOLAR / FOTOVOLTAICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA RENOVABLE (SOLAR)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA RENOVABLE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA EL\u00c9CTRICA (FOTOVOLTAICA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA EL\u00c9CTRICA / FOTOVOLTAICO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA / INFRAESTRUCTURA EL\u00c9CTRICA",
+        "n_proyectos": 1,
+        "avg_score": 90.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE AGREGADOS Y REMEDIACI\u00d3N FLUVIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES P\u00c9TREOS (ARENA Y GRAVA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES P\u00c9TREOS (MINER\u00cdA NO MET\u00c1LICA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES P\u00c9TREOS / AMBIENTAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES P\u00c9TREOS / MINER\u00cdA NO MET\u00c1LICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIALES Y CONSTRUCCI\u00d3N",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXPLOTACI\u00d3N Y APROVECHAMIENTO DE MATERIALES P\u00c9TREOS",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdAS RENOVABLES (FOTOVOLTAICO)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N DE MATERIAL P\u00c9TREO (ARENA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "GESTI\u00d3N DE RESIDUOS / MEDIO AMBIENTE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "FORESTAL / MEDIO AMBIENTE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "EXTRACCI\u00d3N Y APROVECHAMIENTO DE MATERIALES P\u00c9TREOS",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "GESTI\u00d3N DE RESIDUOS PELIGROSOS Y TRATAMIENTO DE AGUAS RESIDUALES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "HIDR\u00c1ULICO-COSTERO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00c9TICO (ENERG\u00cdA SOLAR FOTOVOLTAICA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO TUR\u00cdSTICO/INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "ENERG\u00cdA (GENERACI\u00d3N EL\u00c9CTRICA TEMPORAL)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO / HABITACIONAL CAMPESTRE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO / TURISMO DE LUJO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO / URBAN\u00cdSTICO (LOTIFICACI\u00d3N)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO RESIDENCIAL Y TUR\u00cdSTICO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "DESARROLLO INMOBILIARIO RESIDENCIAL-TUR\u00cdSTICO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "CONSTRUCCI\u00d3N E INFRAESTRUCTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "CONSTRUCCI\u00d3N / INFRAESTRUCTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA HIDR\u00c1ULICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA FERROVIARIA Y LOG\u00cdSTICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA / SERVICIOS LOG\u00cdSTICOS",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA AGR\u00cdCOLA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INDUSTRIAL (MANUFACTURA DE JABONES, DETERGENTES Y ACEITES)",
+        "n_proyectos": 1,
+        "avg_score": 90.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INDUSTRIA ALIMENTARIA L\u00c1CTEA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INDUSTRIA METALMEC\u00c1NICA / RECICLAJE DE METALES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INDUSTRIA QU\u00cdMICA, FABRICACI\u00d3N DE PINTURAS Y RECUBRIMIENTOS AUTOMOTRICES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "HIDR\u00c1ULICO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 0.0
+      },
+      {
+        "sector_nombre": "HIDROAGR\u00cdCOLA / INFRAESTRUCTURA HIDR\u00c1ULICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "HABITACIONAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA H\u00cdDRICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA TUR\u00cdSTICA FLUVIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA P\u00daBLICA / TURISMO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA Y COMUNICACIONES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA HIDR\u00c1ULICA Y SANEAMIENTO (DRENAJE)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO / TURISMO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO / RESIDENCIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO / CAMBIO DE USO DE SUELO FORESTAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 0.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA Y LOG\u00cdSTICA (PATIO DE MOVILIDAD, CAMBIO DE USO DE SUELO FORESTAL)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA VIAL CARRETERA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "LOG\u00cdSTICA / INDUSTRIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INMOBILIARIO/TUR\u00cdSTICO-RESIDENCIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INVESTIGACI\u00d3N CIENT\u00cdFICA (ASTRONOM\u00cdA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MANUFACTURA / PESCA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "LOG\u00cdSTICA Y TRANSPORTE DE CARGA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "LOG\u00cdSTICA Y DESARROLLO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MANUFACTURA DE PAPEL Y PRODUCTOS DE HIGIENE PERSONAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA H\u00cdDRICA Y OBRA CIVIL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA MAR\u00cdTIMA Y TUR\u00cdSTICA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA H\u00cdDRICA / ABASTECIMIENTO DE AGUA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "INFRAESTRUCTURA H\u00cdDRICA / ABASTECIMIENTO DE AGUA POTABLE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINERO (EXTRACCI\u00d3N DE MATERIALES)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MANUFACTURA DE PAPEL Y PRODUCTOS DE PAPEL (INDUSTRIA PAPELERA)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "METALURGIA Y FUNDICI\u00d3N DE METALES",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINERA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "NO VERIFICADO EXTERNAMENTE",
+        "n_proyectos": 1,
+        "avg_score": 90.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINER\u00cdA / EXTRACCI\u00d3N DE MATERIALES P\u00c9TREOS",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "NO ESPECIFICADO EXTERNAMENTE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "MINER\u00cdA E INFRAESTRUCTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "PORTUARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "PORTUARIO / INFRAESTRUCTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "PORTUARIO / INFRAESTRUCTURA MAR\u00cdTIMA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "RECICLAJE DE RESIDUOS PELIGROSOS INDUSTRIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "RESIDENCIAL / INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "PESCA Y ACUICULTURA / INFRAESTRUCTURA PORTUARIA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "PESQUERO / ACU\u00cdCOLA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 0.0
+      },
+      {
+        "sector_nombre": "NO IDENTIFICADO CON FUENTES EXTERNAS",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "SERVICIOS TUR\u00cdSTICOS (RESTAURANTES)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "SANEAMIENTO DE R\u00cdOS Y AGUA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "SANEAMIENTO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO / HOTELERO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO / INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO E INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO Y DESARROLLO INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO / INFRAESTRUCTURA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO, MEDIO AMBIENTE, INFRAESTRUCTURA MARINA",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO/HOSPEDAJE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TURISMO/RECREACI\u00d3N",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "TUR\u00cdSTICO / INMOBILIARIO",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "URBANIZACI\u00d3N HABITACIONAL (UNIFAMILIAR CAMPESTRE, USOS MIXTOS, EQUIPAMIENTO Y SERVICIOS)",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "URBANIZACI\u00d3N HABITACIONAL CAMPESTRE",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      },
+      {
+        "sector_nombre": "URBAN\u00cdSTICO / RESIDENCIAL",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 0.0
+      },
+      {
+        "sector_nombre": "VIVIENDA, INFRAESTRUCTURA, URBANIZACI\u00d3N",
+        "n_proyectos": 1,
+        "avg_score": 100.0,
+        "pct_grounded": 1.0
+      }
+    ],
+    "top_grounded_sector": "INFRAESTRUCTURA CARRETERA",
+    "n_sectores": 147
+  }
+}

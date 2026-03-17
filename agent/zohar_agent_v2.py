@@ -35,7 +35,7 @@ except ImportError:
 try:
     from supabase import create_client, Client
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_PUBLISHABLE_KEY")
     supabase_client = None
     if SUPABASE_URL and SUPABASE_KEY:
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -120,7 +120,7 @@ CONFIG: dict[str, Any] = {
     "VISION_URL":        "https://vision.googleapis.com/v1/images:annotate",
 
     # Gemini Config
-    "GEMINI_MODEL":      "gemini-2.0-flash",
+    "GEMINI_MODEL":      "gemini-3-flash-preview",
 
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,
@@ -521,10 +521,14 @@ class LocalIntelligenceMemory:
             return {"score": 0, "status": "error"}
 
     def store_project(self, pid: str, year: int, d: dict, score: int = 0):
+        log = logging.getLogger("zohar")
         try:
             is_grounded = str(d.get("grounded", "False")).lower() == "true"
             if d.get("fuentes_web"): is_grounded = True
-            
+
+            # Normalizar fuentes a JSON string para SQLite
+            sources_json = json.dumps(d.get("fuentes_web", []))
+
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute("""
                     INSERT OR REPLACE INTO projects 
@@ -534,11 +538,52 @@ class LocalIntelligenceMemory:
                     pid, year, d.get("promovente"), d.get("proyecto"), d.get("estado"),
                     d.get("municipio"), d.get("sector"), d.get("insight"),
                     d.get("reasoning"), d.get("context_snippet"),
-                    1 if is_grounded else 0, json.dumps(d.get("fuentes_web", [])),
+                    1 if is_grounded else 0, sources_json,
                     score, d.get("COORDENADAS") or d.get("coordenadas")
                 ))
+
+            # ── SYNC EN TIEMPO REAL A SUPABASE ────────────────────────────────
+            if supabase_client:
+                try:
+                    # Parsear alertas_noticias si viene como string JSON
+                    alertas = d.get("alertas_noticias", [])
+                    if isinstance(alertas, str):
+                        try: alertas = json.loads(alertas)
+                        except Exception: alertas = []
+
+                    record = {
+                        "id_proyecto":      pid,
+                        "anio":             year,
+                        "promovente":       d.get("promovente"),
+                        "proyecto":         d.get("proyecto"),
+                        "estado":           d.get("estado"),
+                        "municipio":        d.get("municipio"),
+                        "sector":           d.get("sector"),
+                        "insight":          d.get("insight"),
+                        "coordenadas":      d.get("COORDENADAS") or d.get("coordenadas"),
+                        "poligono":         d.get("poligono"),
+                        "grounded":         is_grounded,
+                        "audit_status":     d.get("audit_status", "pending"),
+                        "confidence_score": score,
+                        "fuentes_web":      d.get("fuentes_web", []),
+                        "sources":          d.get("fuentes_web", []),
+                        "riesgo_civil":     d.get("riesgo_civil"),
+                        "sancion_profepa":  d.get("sancion_profepa"),
+                        "alertas_noticias": alertas if isinstance(alertas, list) else [],
+                    }
+                    # Eliminar campos None para evitar errores de tipo en Supabase
+                    record = {k: v for k, v in record.items() if v is not None}
+
+                    supabase_client.table("proyectos").upsert(
+                        record, on_conflict="id_proyecto"
+                    ).execute()
+                    log.debug(f"    ☁️  Supabase sync OK → {pid}")
+                except Exception as sb_err:
+                    # No detener el agente si falla Supabase — solo loguear
+                    log.warning(f"    ⚠️  Supabase sync falló para {pid}: {sb_err}")
+
         except Exception as e:
-            logging.getLogger("zohar").error(f"  ❌ Error guardando en DB: {e}")
+            log.error(f"  ❌ Error guardando en DB: {e}")
 
     def get_stats(self) -> dict:
         try:
@@ -1429,23 +1474,49 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
         return json.loads(cached_row[0])
 
     try:
-        # Prompt optimizado para Esoteria Intelligence Architecture + Gemini Grounding
+        # ── BÚSQUEDA WEB PROFUNDA (Feature 1: Deep Grounding + Civil Alerts) ──
+        # Extraer promovente básico del contexto para búsqueda dirigida
+        promovente_hint = ""
+        for line in context.split("\n"):
+            l = line.lower()
+            if "promovente" in l or "empresa" in l:
+                promovente_hint = line.strip()
+                break
+
         prompt = f"""
-        Actúa como un Líder de Inteligencia Senior de Esoteria. Tu misión es auditar y verificar el proyecto {pid} 
-        utilizando Google Search para asegurar una fundamentación absoluta en la realidad.
+        Actúa como un Líder de Inteligencia Senior de Esoteria. Tu misión es auditar y verificar el proyecto {pid}
+        utilizando Google Search de forma EXHAUSTIVA para obtener datos reales y detectar señales de riesgo.
         TODA LA SALIDA DEBE SER EN ESPAÑOL.
 
         CONTEXTO (NO VERIFICADO):
         {context}
-        
-        PROTOCOLO DE GOBERNANZA:
-        1. Si los datos del contexto están incompletos o son ambiguos, usa Google Search para hallar el PROMOVENTE, UBICACIÓN y SECTOR REALES.
-        2. Proporciona un 'Resumen de Inteligencia Estructurado' en el campo 'insight' (2-3 oraciones que comiencen con un verbo de acción en español).
-        3. LA SALIDA DEBE SER ESTRICTAMENTE JSON VÁLIDO.
-        4. MANDATO DE FUNDAMENTACIÓN: Marca como fundamentado solo si fuentes externas verifican la existencia del proyecto.
-        5. IDIOMA: Genera el insight y todos los campos descriptivos estrictamente en ESPAÑOL.
-        
-        SCHEMA:
+
+        PROTOCOLO DE INVESTIGACIÓN DE 3 CAPAS (ejecuta TODAS usando Google Search):
+
+        CAPA 1 — VERIFICACIÓN BASE:
+        Busca en Google: '{pid} SEMARNAT MIA' y '{promovente_hint} impacto ambiental México'
+        Confirma: ¿Existe el proyecto? ¿Coincide ubicación, sector y nombre del promovente?
+
+        CAPA 2 — INTELIGENCIA DE RIESGO CIVIL (NUEVO):
+        Busca: '{promovente_hint} oposición vecinal' | '{promovente_hint} manifestación ambiental' |
+               '{promovente_hint} amparo ambiental' | 'proyecto {pid} comunidades'
+        Si encuentras noticias de conflicto social, captúralas en 'alertas_noticias'.
+
+        CAPA 3 — AUDITORÍA PROFEPA (NUEVO):
+        Busca: '{promovente_hint} PROFEPA multa sanción' | '{promovente_hint} clausura ambiental' |
+               '{promovente_hint} inspección federal'
+        Si hay antecedentes de sanción, captúralos en 'sancion_profepa'.
+
+        REGLAS DE GOBERNANZA:
+        1. insight: 2-3 oraciones en español empezando con verbo de acción resumiendo hallazgos clave.
+        2. riesgo_civil: "ALTO" | "MEDIO" | "BAJO" | "NINGUNO" — según oposición encontrada.
+        3. sancion_profepa: descripción breve de la sanción o "Sin antecedentes".
+        4. alertas_noticias: lista de titulares encontrados (o lista vacía []).
+        5. JSON VÁLIDO OBLIGATORIO. Usa null para campos sin datos.
+        6. IDIOMA: Todo en ESPAÑOL.
+        7. coordenadas: Si encuentras lat/lon en fuentes, inclúyelas en formato "LAT, LON".
+
+        SCHEMA (devuelve SOLO este JSON, sin markdown):
         {{
           "estado": "string",
           "municipio": "string",
@@ -1455,11 +1526,14 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
           "sector": "string",
           "insight": "string",
           "coordenadas": "string",
-          "poligono": "string"
+          "poligono": "string",
+          "riesgo_civil": "ALTO|MEDIO|BAJO|NINGUNO",
+          "sancion_profepa": "string",
+          "alertas_noticias": ["titular 1", "titular 2"]
         }}
         """
 
-        # Definición explícita de genai.types.Tool
+        # Definición explícita de genai.types.Tool con Google Search
         search_tool = types.Tool(
             google_search=types.GoogleSearch()
         )
@@ -1468,8 +1542,7 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
             model=CONFIG["GEMINI_MODEL"],
             contents=prompt,
             config=types.GenerateContentConfig(
-                tools=[search_tool],
-                response_mime_type='application/json'
+                tools=[search_tool]
             )
         )
 
@@ -1804,32 +1877,77 @@ async def extract_with_vision(pid: str, year: int, pdf_name: str, log: logging.L
             log.warning("  ⚠️ pdf2image/poppler no disponible")
             return None
 
-        images = convert_from_path(str(pdf_path), first_page=1, last_page=3, dpi=200)
-        
+        # Escanear páginas: 1-3 para texto, página 1 para mapa/croquis
+        images = convert_from_path(str(pdf_path), first_page=1, last_page=4, dpi=200)
+
         full_text = ""
+        geo_coords = None
+
+        from io import BytesIO
         for i, img in enumerate(images):
             img.thumbnail((2000, 2000))
-            from io import BytesIO
             buf = BytesIO()
             img.save(buf, format="JPEG", quality=85)
             img_bytes = buf.getvalue()
-            
-            # Gemini Vision (modelo 2.0-flash o superior)
             img_part = types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
-            response = gemini_client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=["Extrae el texto de esta página de la Gaceta SEMARNAT.", img_part]
+
+            # ── CAPA 1: Extracción de texto ──────────────────────────────────
+            response_text = gemini_client.models.generate_content(
+                model='gemini-3-flash-preview',
+                contents=[
+                    "Extrae TODO el texto visible en esta página de la Gaceta SEMARNAT. "
+                    "Preserva formato de tablas. Si hay coordenadas geográficas (UTM, decimal o DMS), inclúyelas.",
+                    img_part
+                ]
             )
-            
-            if response.text:
-                full_text += f"\n--- PÁGINA {i+1} ---\n{response.text}"
+            if response_text.text:
+                full_text += f"\n--- PÁGINA {i+1} ---\n{response_text.text}"
+
+            # ── CAPA 2: Extractor de Coordenadas por Visión (Feature 2) ─────
+            # Solo analizar imágenes que parecen contener mapas (generalmente páginas 2-4)
+            if i >= 1 and geo_coords is None:
+                response_geo = gemini_client.models.generate_content(
+                    model='gemini-3-flash-preview',
+                    contents=[
+                        """Analiza esta imagen. Si contiene un mapa, croquis de ubicación, polígono o
+                        coordenadas geográficas de cualquier sistema (decimal, DMS, UTM):
+                        1. Extrae las coordenadas del punto central o centroide del área del proyecto.
+                        2. Convierte al formato decimal: LAT, LON (ej: 19.4326, -99.1332).
+                        3. Si hay un polígono, extrae los vértices como lista de pares LAT,LON.
+                        4. Si NO hay mapa ni coordenadas, responde exactamente: NO_MAPA
+                        Responde SOLO con el JSON: {"lat_lon": "LAT, LON", "poligono": [[lat,lon],...]} o NO_MAPA""",
+                        img_part
+                    ]
+                )
+                if response_geo.text and "NO_MAPA" not in response_geo.text:
+                    raw_geo = response_geo.text.strip()
+                    try:
+                        # Extraer JSON del resultado de visión
+                        gm = re.search(r'\{.*\}', raw_geo, re.DOTALL)
+                        if gm:
+                            geo_data = json.loads(gm.group(0))
+                            geo_coords = geo_data.get("lat_lon")
+                            if geo_coords:
+                                log.info(f"  🗺️  Coordenadas extraídas por Visión para {pid}: {geo_coords}")
+                    except Exception:
+                        pass
 
         if not full_text:
             log.warning(f"  ⚠️ No se obtuvo inteligencia visual para {pid}")
             return None
 
+        # Añadir coordenadas al contexto si se encontraron
+        if geo_coords:
+            full_text += f"\n\n[COORDENADAS EXTRAÍDAS POR VISIÓN]: {geo_coords}"
+
         log.info(f"  🧠 Procesando texto de visión con Gemini para {pid}...")
-        return await _extract_with_ai_async(pid, full_text, log)
+        result = await _extract_with_ai_async(pid, full_text, log)
+
+        # Enriquecer resultado con coordenadas georreferenciadas si el extractor de texto no las capturó
+        if result and geo_coords and not result.get("coordenadas"):
+            result["coordenadas"] = geo_coords
+
+        return result
 
     except Exception as e:
         log.error(f"  ❌ Error crítico en Vision Pipeline: {e}")

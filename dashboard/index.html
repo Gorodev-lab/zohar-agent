@@ -162,6 +162,9 @@
         <div class="tab" :class="activeTab === 'financial' ? 'active' : ''" @click="setTab('financial')">[ FINANCIAL_CSV ]</div>
         <div class="tab" :class="activeTab === 'regulatory' ? 'active' : ''" @click="setTab('regulatory')">[ REGULATORY_CSV ]</div>
         <div class="tab" :class="activeTab === 'air_quality' ? 'active' : ''" @click="setTab('air_quality')">[ AIR_QUALITY_DATA ]</div>
+        <a href="/aire" target="_blank" class="tab" style="margin-left:auto; margin-right:0; border-left:1px solid var(--amber); border-right:none; color:inherit; text-decoration:none; display:flex; align-items:center; gap:6px;">
+            🗺️&nbsp;[ MAPA_CALIDAD_AIRE ]
+        </a>
     </div>
 
     <main>
@@ -290,12 +293,14 @@
                     let url = '/api/projects';
                     if (tab === 'regulatory') url = '/api/csv_data?type=regulatory';
                     if (tab === 'financial') url = '/api/csv_data?type=financial';
+                    if (tab === 'air_quality') url = '/api/csv_data?type=air_quality&limit=50';
 
                     try {
                         const res = await fetch(url, { headers: h }).then(r => r.json());
-                        this.data = res;
-                        if (res.length > 0) {
-                            this.columns = Object.keys(res[0]);
+                        // si es array recortarlo para no saturar AlpineJS (el mapa carga completo)
+                        this.data = tab === 'air_quality' && res.length > 50 ? res.slice(0, 50) : res;
+                        if (this.data.length > 0) {
+                            this.columns = Object.keys(this.data[0]);
                         }
                     } catch (e) {
                         console.error('Data fetch error:', e);

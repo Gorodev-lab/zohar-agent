@@ -32,7 +32,7 @@ app = FastAPI(title="Zohar Intelligence API")
 HOME = Path(os.path.expanduser("~"))
 BASE_DIR = Path(__file__).parent.parent
 DB_PATH = HOME / "zohar_intelligence.db"
-DUCK_PATH = HOME / "gaceta_work" / "zohar_warehouse.duckdb"
+DUCK_PATH = HOME / "zohar_warehouse.duckdb"
 CSV_PATH = HOME / "zohar_historico_proyectos.csv"
 STATE_FILE = HOME / "zohar_agent_state.json"
 QUEUE_FILE = BASE_DIR / "agent" / "zohar_queue.json"
@@ -54,6 +54,13 @@ async def get_index():
     if index_path.exists():
         return index_path.read_text()
     return "Error: No se encontró el archivo index.html del Dashboard"
+
+@app.get("/aire", response_class=HTMLResponse)
+async def get_aire():
+    aire_path = DASHBOARD_DIR / "aire.html"
+    if aire_path.exists():
+        return aire_path.read_text()
+    return "Error: No se encontró aire.html"
 
 # Mount para archivos estáticos internos (si los hubiera)
 # app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -190,27 +197,39 @@ async def get_project_report(pid: str):
 @app.get("/api/csv_data")
 async def get_csv_data(type: str = "regulatory"):
     """
-    Lee datos de los CSVs locales para el dashboard.
-    types: 'regulatory' (ordenamientos), 'financial' (ingresos)
+    Lee datos. Para aire, lee de DuckDB en lugar del CSV para usar el "grounding" local.
     """
     try:
-        file_map = {
-            "regulatory": BASE_DIR / "ordenamientos_ecologicos_expedidos.csv",
-            "financial": BASE_DIR / "ingresos_2024.csv",
-            "air_quality": BASE_DIR / "d3_aire01_49_1.csv"
-        }
-        target_file = file_map.get(type)
-        if not target_file or not target_file.exists():
-            return []
-            
-        df = pd.read_csv(target_file)
-        # Limpiar nombres de columnas
-        df.columns = [c.upper().replace(" ", "_") for c in df.columns]
-        # Limitamos a 200 filas para no saturar el DOM
-        df = df.head(200).fillna("")
-        return df.to_dict(orient="records")
+        if type == "air_quality":
+            if not DUCK_PATH.exists():
+                return []
+            with duckdb.connect(str(DUCK_PATH)) as d_conn:
+                df = d_conn.execute("SELECT * FROM aire_emisiones").df()
+                # Renombrar para compatibilidad con el frontend
+                df = df.rename(columns={
+                    "entidad": "Entidad_federativa",
+                    "municipio": "Municipio",
+                    "fuente": "Tipo_de_Fuente",
+                    "so2": "SO_2", "co": "CO", "nox": "NOx", "cov": "COV",
+                    "pm10": "PM_010", "pm25": "PM_2_5", "nh3": "NH_3"
+                })
+                df = df.fillna("")
+                return df.to_dict(orient="records")
+        else:
+            file_map = {
+                "regulatory":  BASE_DIR / "ordenamientos_ecologicos_expedidos.csv",
+                "financial":   BASE_DIR / "ingresos_2024.csv"
+            }
+            target_file = file_map.get(type)
+            if not target_file or not target_file.exists():
+                return []
+
+            df = pd.read_csv(target_file)
+            df.columns = [c.strip() for c in df.columns]
+            df = df.iloc[:200].fillna("")
+            return df.to_dict(orient="records")
     except Exception as e:
-        print(f"Error reading CSV {type}: {e}")
+        print(f"Error reading data {type}: {e}")
         return []
 
 @app.get("/api/diagnostics")
