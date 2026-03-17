@@ -1,0 +1,25 @@
+{
+  "name": "zohar-ton-intermediary",
+  "version": "1.0.0",
+  "description": "Smart Intermediary for Zohar Agent on TON Blockchain using TONL format",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "ton": "^13.9.0",
+    "ton-core": "^0.15.0",
+    "@tonconnect/sdk": "^3.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.12",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.10.5"
+  }
+}

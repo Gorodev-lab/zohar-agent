@@ -110,13 +110,21 @@ CONFIG: dict[str, Any] = {
     # Menos contexto para modelos pequeños → menos ruido tabular
     "CONTEXT_CHARS":     int(os.environ.get("ZOHAR_CONTEXT_CHARS", "2500")),
     
+    # Extra context data
+    "ORDENAMIENTOS_CSV": AGENT_DIR.parent / "ordenamientos_ecologicos_expedidos.csv",
+    "HISTORIC_DATA_JSON": AGENT_DIR / "semarnat_historic_consultations.json",
+    "AIR_QUALITY_CSV": AGENT_DIR.parent / "d3_aire01_49_1.csv",
+
     # Google Cloud Vision
     "VISION_API_KEY":    os.environ.get("GEMINI_API_KEY"),
     "VISION_URL":        "https://vision.googleapis.com/v1/images:annotate",
 
+    # Gemini Config
+    "GEMINI_MODEL":      "gemini-2.0-flash",
+
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,
-    "YEARS":             [2026, 2025],
+    "YEARS":             [2026],
     "DRY_RUN":           False,
     "DAEMON_MODE":       False,
     "HEARTBEAT_FILE":    HOME / ".zohar_heartbeat",
@@ -127,16 +135,22 @@ CONFIG: dict[str, Any] = {
 # MOTORES DE ALTO RENDIMIENTO (STRATEGY 1)
 # ─────────────────────────────────────────────────────────
 # Semáforo para controlar concurrencia de extracción
-extraction_semaphore = asyncio.Semaphore(5)
+extraction_semaphore = asyncio.Semaphore(10)
+# Cliente HTTP global para reutilización de conexiones (pooling)
+http_client: Optional[httpx.AsyncClient] = None
 
 # Inicializar DuckDB (Storage local de alto rendimiento)
 DUCK_DB_FILE = CONFIG["WORK_DIR"] / "zohar_warehouse.duckdb"
 DUCK_DB_FILE.parent.mkdir(parents=True, exist_ok=True)
-try:
-    duck_conn = duckdb.connect(str(DUCK_DB_FILE))
-except Exception as e:
-    logging.warning(f"⚠️ DuckDB locked ({e}). Usando modo in-memory para esta sesión.")
-    duck_conn = duckdb.connect(":memory:")
+
+def get_duck_conn():
+    try:
+        return duckdb.connect(str(DUCK_DB_FILE))
+    except Exception as e:
+        logging.warning(f"⚠️ DuckDB locked ({e}). Usando modo in-memory.")
+        return duckdb.connect(":memory:")
+
+duck_conn = get_duck_conn()
 
 duck_conn.execute("""
     CREATE TABLE IF NOT EXISTS fragments_cache (
@@ -152,6 +166,48 @@ duck_conn.execute("""
         grounded BOOLEAN,
         audit_trace TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+
+duck_conn.execute("""
+    CREATE TABLE IF NOT EXISTS environmental_zoning (
+        id INTEGER PRIMARY KEY,
+        estado TEXT,
+        programa TEXT,
+        modalidad TEXT,
+        expedicion TEXT,
+        superficie_ha DOUBLE,
+        fecha DATE
+    )
+""")
+
+duck_conn.execute("""
+    CREATE TABLE IF NOT EXISTS historic_consultations (
+        clave TEXT PRIMARY KEY,
+        modalidad TEXT,
+        promovente TEXT,
+        proyecto TEXT,
+        ubicacion TEXT,
+        sector TEXT,
+        fechas TEXT,
+        anio INTEGER,
+        links JSON
+    )
+""")
+
+duck_conn.execute("""
+    CREATE TABLE IF NOT EXISTS air_quality_emissions (
+        entidad TEXT,
+        municipio TEXT,
+        tipo_fuente TEXT,
+        so2 DOUBLE,
+        co DOUBLE,
+        nox DOUBLE,
+        cov DOUBLE,
+        pm10 DOUBLE,
+        pm2_5 DOUBLE,
+        nh3 DOUBLE,
+        entidad_nombre TEXT
     )
 """)
 
@@ -235,7 +291,7 @@ class PersistentQueue:
                     k: QueueItem(
                         pid=v.get("pid", k),
                         pdf=v.get("pdf", ""),
-                        year=int(v.get("year", 2024)),
+                        year=int(v.get("year", 2026)),
                         txt_file=v.get("txt_file", ""),
                         attempts=int(v.get("attempts", 0)),
                         status=v.get("status", "pending"),
@@ -575,10 +631,141 @@ class PortalMetadataCache:
         except Exception:
             pass
 
+# ─────────────────────────────────────────────────────────
+# GEOSPATIAL & HISTORICAL ADVISORS (Strategy 1 - Data Enrichment)
+# ─────────────────────────────────────────────────────────
+class GeospatialAdvisor:
+    """Proporciona contexto sobre ordenamientos ecológicos aplicables."""
+    def __init__(self, duck_conn):
+        self.con = duck_conn
+        self._load_data()
+
+    def _load_data(self):
+        csv_path = CONFIG["ORDENAMIENTOS_CSV"]
+        if not csv_path.exists():
+            logging.warning(f"⚠️ {csv_path} no encontrado")
+            return
+        
+        try:
+            # Cargar CSV a DuckDB si está vacío
+            count = self.con.execute("SELECT COUNT(*) FROM environmental_zoning").fetchone()[0]
+            if count == 0:
+                # Usamos read_csv_auto con skip=1 si es necesario, o dejamos que duckdb lo detecte
+                self.con.execute(f"INSERT INTO environmental_zoning SELECT * FROM read_csv_auto('{csv_path}', header=True)")
+                new_count = self.con.execute("SELECT COUNT(*) FROM environmental_zoning").fetchone()[0]
+                logging.info(f"📍 GeospatialAdvisor: {new_count} programas cargados.")
+        except Exception as e:
+            logging.error(f"❌ Error al cargar ordenamientos: {e}")
+
+    def get_applicable_programs(self, estado: str, municipio: str = "") -> List[dict]:
+        """Busca programas de ordenamiento aplicables por estado y municipio."""
+        if not estado: return []
+        
+        query = "SELECT * FROM environmental_zoning WHERE estado ILIKE ?"
+        params = [f"%{estado}%"]
+        
+        if municipio:
+            query += " OR programa ILIKE ?"
+            params.append(f"%{municipio}%")
+            
+        try:
+            res = self.con.execute(query, params).fetchall()
+            cols = [d[0] for d in self.con.description]
+            return [dict(zip(cols, row)) for row in res]
+        except Exception:
+            return []
+
+class HistoricalConsultationAdvisor:
+    """Busca antecedentes en el portal de consultas públicas."""
+    def __init__(self, duck_conn):
+        self.con = duck_conn
+        self._load_local_cache()
+
+    def _load_local_cache(self):
+        json_path = CONFIG["HISTORIC_DATA_JSON"]
+        if not json_path.exists(): return
+        
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            # Upsert incremental
+            for entry in data:
+                self.con.execute("""
+                    INSERT OR IGNORE INTO historic_consultations 
+                    (clave, modalidad, promovente, proyecto, ubicacion, sector, fechas, anio, links)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    entry.get("clave"), entry.get("modalidad"), entry.get("promovente"),
+                    entry.get("proyecto"), entry.get("ubicacion"), entry.get("sector"),
+                    entry.get("fechas"), entry.get("anio"), json.dumps(entry.get("links"))
+                ])
+        except Exception as e:
+            logging.error(f"❌ Error al cargar histórico: {e}")
+
+    def find_by_pid(self, pid: str) -> Optional[dict]:
+        try:
+            res = self.con.execute("SELECT * FROM historic_consultations WHERE clave = ?", [pid]).fetchone()
+            if res:
+                cols = [d[0] for d in self.con.description]
+                return dict(zip(cols, res))
+        except Exception:
+            pass
+        return None
+
+class AirQualityAdvisor:
+    """Proporciona datos sobre emisiones atmosféricas históricas por municipio."""
+    def __init__(self, duck_conn):
+        self.con = duck_conn
+        self._load_data()
+
+    def _load_data(self):
+        csv_path = CONFIG["AIR_QUALITY_CSV"]
+        if not csv_path.exists():
+            logging.warning(f"⚠️ {csv_path} no encontrado")
+            return
+        
+        try:
+            count = self.con.execute("SELECT COUNT(*) FROM air_quality_emissions").fetchone()[0]
+            if count == 0:
+                self.con.execute(f"INSERT INTO air_quality_emissions SELECT * FROM read_csv_auto('{csv_path}', header=True)")
+                new_count = self.con.execute("SELECT COUNT(*) FROM air_quality_emissions").fetchone()[0]
+                logging.info(f"💨 AirQualityAdvisor: {new_count} registros de emisiones cargados.")
+        except Exception as e:
+            logging.error(f"❌ Error al cargar aire: {e}")
+
+    def get_aggregated_emissions(self, municipio: str, entidad: str = "") -> dict:
+        """Devuelve promedios y máximos históricos resumidos (Optimización TONL)."""
+        query = """
+            SELECT 
+                AVG(so2) as avg_so2, MAX(so2) as max_so2,
+                AVG(nox) as avg_nox, MAX(nox) as max_nox,
+                AVG(pm2_5) as avg_pm25, MAX(pm2_5) as max_pm25
+            FROM air_quality_emissions 
+            WHERE municipio ILIKE ?
+        """
+        params = [f"%{municipio}%"]
+        if entidad:
+            query += " AND entidad ILIKE ?"
+            params.append(f"%{entidad}%")
+        
+        try:
+            res = self.con.execute(query, params).fetchone()
+            if not res or res[0] is None: return {}
+            return {
+                "avg": {"so2": round(res[0], 2), "nox": round(res[2], 2), "pm25": round(res[4], 2)},
+                "max": {"so2": round(res[1], 2), "nox": round(res[3], 2), "pm25": round(res[5], 2)}
+            }
+        except Exception:
+            return {}
+
 # Instancias Globales
 memory: Optional[LocalIntelligenceMemory] = None
 prompts: Optional[PromptManager] = None
 portal_cache: Optional[PortalMetadataCache] = None
+geospatial: Optional[GeospatialAdvisor] = None
+historical: Optional[HistoricalConsultationAdvisor] = None
+air_quality: Optional[AirQualityAdvisor] = None
 
 DEFAULT_LOC_FINDER = """\
 <instruction>
@@ -699,34 +886,43 @@ def wait_for_llama(log: logging.Logger, max_wait: int = 90) -> bool:
 
 
 # ─────────────────────────────────────────────────────────
-# HTTP HELPER (con User-Agent y timeout)
+# HTTP HELPER (Async con pool)
 # ─────────────────────────────────────────────────────────
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/109.0",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
     "Accept": "text/html,application/pdf,*/*",
 }
 
-def http_get(url: str, timeout: int = 45, binary: bool = False):
+async def http_get(url: str, timeout: int = 45, binary: bool = False):
     """
-    GET robusto con reintentos y manejo de errores (Pilar Automate the Boring Stuff).
-    Implementa SRE Network Integrity.
+    GET asíncrono robusto usando la piscina global http_client.
     """
-    req = urllib.request.Request(url, headers=HEADERS)
-    MAX_RETRY = 2
+    global http_client
+    if http_client is None:
+        http_client = httpx.AsyncClient(headers=HEADERS, timeout=timeout, follow_redirects=True)
     
+    MAX_RETRY = 2
     for attempt in range(MAX_RETRY + 1):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                data = r.read()
-                return data if binary else data.decode("utf-8", errors="replace")
-        except (urllib.error.URLError, TimeoutError) as e:
+            resp = await http_client.get(url)
+            resp.raise_for_status()
+            return resp.content if binary else resp.text
+        except Exception as e:
             if attempt < MAX_RETRY:
-                time.sleep(2 * (attempt + 1))
+                await asyncio.sleep(2 * (attempt + 1))
                 continue
             return None
-        except Exception:
-            return None
     return None
+
+def http_get_sync(url: str, timeout: int = 45, binary: bool = False):
+    """Fallback síncrono para lugares donde no se puede usar await."""
+    try:
+        req = urllib.request.Request(url, headers=HEADERS)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = r.read()
+            return data if binary else data.decode("utf-8", errors="replace")
+    except Exception:
+        return None
 
 
 # ─────────────────────────────────────────────────────────
@@ -789,8 +985,8 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
     report_state("—", "MONITOREANDO", f"Gaceta {year} (Selenium)")
     log.info(f"🔍 Verificando Gaceta {year} (HTTP First): {url}")
     
-    def _get_html():
-        html = http_get(url, timeout=60)
+    async def _get_html():
+        html = await http_get(url, timeout=60)
         
         if html is None or "document.write" in html or len(html) < 500:
             log.warning(f"  ⚠️ HTTP insuficiente o JS detectado, usando Selenium (Pesado)...")
@@ -816,7 +1012,8 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
                 return None
         return html
 
-    html = await asyncio.to_thread(_get_html)
+    # Corregir la llamada a to_thread ya que _get_html ahora es async
+    html = await _get_html()
     if not html:
         return []
 
@@ -875,7 +1072,7 @@ async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
     if not pdf_path.exists():
         report_state(filename, "DESCARGANDO", "PDF")
         log.info(f"  ⬇️  {filename}")
-        data = http_get(pdf_url, timeout=90, binary=True)
+        data = await http_get(pdf_url, timeout=90, binary=True)
         if data is None:
             log.warning(f"  ⚠️ Fallo descarga: {filename}")
             return 0
@@ -1109,6 +1306,39 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
                     log.debug(f"    Grounding {target}: '{ai_val}' -> '{official_val}'")
                 extracted[target] = official_val
     
+    # ── ENRIQUECIMIENTO GEOSPATIAL ────────────────────────────────
+    if geospatial:
+        estado = extracted.get("estado", "")
+        municipio = extracted.get("municipio", "")
+        programs = geospatial.get_applicable_programs(estado, municipio)
+        if programs:
+            extracted["ordenamientos_aplicables"] = [p["programa"] for p in programs[:3]]
+            log.debug(f"    📍 Geospatial Grounding: {len(programs)} programas hallados")
+
+    # ── ANTECEDENTES HISTÓRICOS ──────────────────────────────────
+    if historical:
+        h_data = historical.find_by_pid(extracted.get("pid", ""))
+        if h_data:
+            extracted["historico_consulta"] = True
+            extracted["fechas_consulta"] = h_data["fechas"]
+            log.info(f"    📜 Antecedente histórico hallado para {extracted.get('pid')}")
+
+    # ── CALIDAD DEL AIRE ────────────────────────────────────────
+    if air_quality:
+        mun = extracted.get("municipio", "")
+        ent = extracted.get("estado", "")
+        profile = air_quality.get_emissions_profile(mun, ent)
+        if profile:
+            # Resumir emisiones críticas (ej. NOx y PM2.5 de fuentes fijas)
+            fixed_source = next((p for p in profile if "fijas" in p["tipo_fuente"].lower()), None)
+            if fixed_source:
+                extracted["emisiones_criticas_zona"] = {
+                    "SO2": fixed_source["so2"],
+                    "NOx": fixed_source["nox"],
+                    "PM2.5": fixed_source["pm2_5"]
+                }
+                log.debug(f"    💨 Air Quality Grounding: Perfil hallado para {mun}")
+
     return extracted
 
 # Los prompts se cargarán dinámicamente usando PromptManager
@@ -1196,10 +1426,11 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
         )
 
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model=CONFIG["GEMINI_MODEL"],
             contents=prompt,
             config=types.GenerateContentConfig(
-                tools=[search_tool]
+                tools=[search_tool],
+                response_mime_type='application/json'
             )
         )
 
@@ -1477,7 +1708,7 @@ async def fetch_portal_docs(pid: str, log: logging.Logger) -> dict:
     
     for attempt in range(1, 4):
         log.info(f"  🌐 Portal: consultando {pid} (Intento {attempt})")
-        content = http_get(api_url, timeout=35 * attempt) # Timeout creciente
+        content = await http_get(api_url, timeout=35 * attempt) # Timeout creciente
         
         if content:
             try:
@@ -1507,7 +1738,8 @@ def download_document(pid: str, doc_url: str, doc_type: str, log: logging.Logger
         return save_path
 
     log.info(f"  ⬇️  Descargando {doc_type} para {pid}...")
-    data = http_get(doc_url, timeout=120, binary=True)
+    # download_document no es async en este contexto para simplificar, pero usamos call asíncrono interno
+    data = http_get_sync(doc_url, timeout=120, binary=True)
     if data and data[:4] == b'%PDF':
         save_path.write_bytes(data)
         log.info(f"  ✅ Guardado: {save_path}")
@@ -1805,7 +2037,7 @@ def _flag_proponent_density(pid: str, d: dict, memory: LocalIntelligenceMemory, 
     Detecta si un promovente tiene una concentración inusual de proyectos (Gobernanza).
     """
     prom = d.get("promovente")
-    year = d.get("year", 2024)
+    year = d.get("year", 2026)
     if not prom or not memory: return
     
     try:
@@ -1962,7 +2194,7 @@ signal.signal(signal.SIGTERM, _handle_signal)
 # MAIN
 # ─────────────────────────────────────────────────────────
 async def main():
-    # Soporte para argumentos: --year 2024 o --daemon
+    # Soporte para argumentos: --year 2026 o --daemon
     if "--daemon" in sys.argv:
         CONFIG["DAEMON_MODE"] = True
     if "--dry-run" in sys.argv:
@@ -1990,10 +2222,13 @@ async def main():
     seen  = SeenGacetas(CONFIG["SEEN_FILE"])
     
     # Inicializar Memoria y Prompts
-    global memory, prompts, portal_cache
+    global memory, prompts, portal_cache, geospatial, historical, air_quality
     memory  = LocalIntelligenceMemory(CONFIG["DB_FILE"])
     prompts = PromptManager(CONFIG["PROMPTS_DIR"])
     portal_cache = PortalMetadataCache(CONFIG["DOCS_DIR"] / "portal_cache.json")
+    geospatial = GeospatialAdvisor(duck_conn)
+    historical = HistoricalConsultationAdvisor(duck_conn)
+    air_quality = AirQualityAdvisor(duck_conn)
     
     log.info(f"🚀 ZOHAR AGENT v2.2 ACTIVO | Memoria: {memory.get_stats()}")
     log.info(f"  ZOHAR AGENT v2.2  |  Años: {target_years[0]}...{target_years[-1]}  |  DRY_RUN:{CONFIG['DRY_RUN']}")
