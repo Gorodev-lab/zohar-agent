@@ -384,7 +384,8 @@
                         <thead>
                             <tr>
                                 <th style="width: 140px;">ID_REF / AÑO</th>
-                                <th style="width: 150px;">GEOLOCALIZACIÓN</th>
+                                <th style="width: 120px;">ESTADO</th>
+                                <th style="width: 150px;">LOCALIZACIÓN</th>
                                 <th>INSIGHT DE INTEL Y DESCRIPCIÓN</th>
                                 <th style="width: 160px;">ENTIDADES</th>
                             </tr>
@@ -395,29 +396,31 @@
                                     <td>
                                         <div class="id-badge" x-text="p.ID_PROYECTO"></div>
                                         <span class="tag tag-year" style="margin-top:4px; display:inline-block;" x-text="p.ANIO"></span>
-                                        <template x-if="p.grounded">
+                                        <template x-if="p.GROUNDED">
                                             <span class="tag tag-grounded" style="margin-left:4px;">VERIFIED</span>
                                         </template>
                                     </td>
                                     <td>
-                                        <div style="color:var(--fg); font-weight:700" x-text="p.ESTADO"></div>
-                                        <div style="color:var(--secondary); font-size:10px;" x-text="p.MUNICIPIO"></div>
-                                        <template x-if="p.coordenadas">
-                                            <span class="coords" x-text="p.coordenadas"></span>
+                                        <div style="color:var(--accent); font-weight:700; text-transform:uppercase; font-size:10px;" x-text="p.ESTADO"></div>
+                                    </td>
+                                    <td>
+                                        <div style="color:var(--fg); font-weight:700" x-text="p.MUNICIPIO"></div>
+                                        <template x-if="p.COORDENADAS">
+                                            <span class="coords" x-text="p.COORDENADAS"></span>
                                         </template>
-                                        <template x-if="!p.coordenadas">
+                                        <template x-if="!p.COORDENADAS">
                                             <span class="coords" style="color:var(--secondary); opacity:0.5;">[SIN_COORD]</span>
                                         </template>
                                     </td>
                                     <td>
                                         <div class="insight-text">
                                             <strong style="color:var(--accent); display:block; margin-bottom:2px;" x-text="p.PROYECTO"></strong>
-                                            <span x-text="p.insight || p.proyecto"></span>
+                                            <span x-text="p.INSIGHT || p.PROYECTO"></span>
                                         </div>
                                     </td>
                                     <td>
                                         <div class="entity-name" x-text="p.PROMOVENTE"></div>
-                                        <div style="font-size:9px; color:var(--secondary);" x-text="p.sector || 'NO_sector_detectado'"></div>
+                                        <div style="font-size:9px; color:var(--secondary);" x-text="p.SECTOR || 'NO_sector_detectado'"></div>
                                     </td>
                                 </tr>
                             </template>
@@ -464,31 +467,31 @@
                 <div class="card-lbl">Datos de Geolocalización</div>
                 <div style="margin-top:5px;">
                     <div style="font-size:13px; font-weight:700;" x-text="selectedProject?.ESTADO + ', ' + selectedProject?.MUNICIPIO"></div>
-                    <div class="coords" style="font-size:12px;" x-text="selectedProject?.coordenadas || '[EXTRACCIÓN_PENDIENTE]'"></div>
+                    <div class="coords" style="font-size:12px;" x-text="selectedProject?.COORDENADAS || '[EXTRACCIÓN_PENDIENTE]'"></div>
                 </div>
             </div>
             <div>
                 <div class="card-lbl">Entidad Responsable</div>
                 <div style="margin-top:5px; font-size:13px; font-weight:700; color:var(--primary)" x-text="selectedProject?.PROMOVENTE"></div>
-                <div style="font-size:11px; color:var(--secondary)" x-text="'Sector: ' + (selectedProject?.sector || 'N/A')"></div>
+                <div style="font-size:11px; color:var(--secondary)" x-text="'Sector: ' + (selectedProject?.SECTOR || 'N/A')"></div>
             </div>
         </div>
 
         <div style="margin-bottom:20px;">
             <div class="card-lbl">Resumen de Inteligencia (Insight)</div>
             <div style="font-size:13px; line-height:1.6; margin-top:8px; color:var(--fg); background:rgba(255,255,255,0.03); padding:10px; border-left:2px solid var(--accent);" 
-                 x-text="selectedProject?.insight || 'No hay un resumen detallado disponible.'"></div>
+                 x-text="selectedProject?.INSIGHT || 'No hay un resumen detallado disponible.'"></div>
         </div>
 
         <div>
             <div class="card-lbl">Citaciones y Fuentes de Fundamentación</div>
             <div style="margin-top:10px; font-size:11px;">
-                <template x-if="selectedProject?.sources">
-                    <template x-for="src in JSON.parse(selectedProject.sources)">
+                <template x-if="selectedProject?.SOURCES">
+                    <template x-for="src in JSON.parse(selectedProject.SOURCES)">
                         <a :href="src.uri" target="_blank" style="display:block; color:var(--accent); text-decoration:none; margin-bottom:6px; padding:5px; border:1px solid var(--border); overflow:hidden; text-overflow:ellipsis;" x-text="src.title || src.uri"></a>
                     </template>
                 </template>
-                <template x-if="!selectedProject?.sources || JSON.parse(selectedProject.sources).length === 0">
+                <template x-if="!selectedProject?.SOURCES || JSON.parse(selectedProject.SOURCES).length === 0">
                     <span style="color:var(--secondary); font-style:italic;">No se han verificado fuentes externas en este ciclo.</span>
                 </template>
             </div>

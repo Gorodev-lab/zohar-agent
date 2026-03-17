@@ -106,8 +106,9 @@ async def get_projects():
     try:
         with sqlite3.connect(DB_PATH) as conn:
             df = pd.read_sql_query("SELECT * FROM projects ORDER BY year DESC, created_at DESC LIMIT 100", conn)
-            # Renombrar columnas
-            df = df.rename(columns={"pid": "ID_PROYECTO", "year": "ANIO"})
+            # Normalizar nombres de columnas a mayúsculas para el Dashboard
+            df.columns = [c.upper() for c in df.columns]
+            df = df.rename(columns={"PID": "ID_PROYECTO", "YEAR": "ANIO"})
             # Usar to_json para manejar NaN -> null correctamente
             json_str = df.to_json(orient="records")
             return json.loads(json_str)
