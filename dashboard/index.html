@@ -3,20 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZOHAR // TERMINAL OPERATIVA // ARCH-LINUX</title>
+    <title>ZOHAR // TERMINAL_V1 // AMBER_PHOSPHOR</title>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0d0f11;
-            --bg-darker: #08090a;
-            --fg: #d1d5db;
-            --primary: #1793d1; /* Arch Blue */
-            --secondary: #4a4a4a;
-            --accent: #50fa7b;
-            --err: #ff5555;
-            --warn: #ffb86c;
-            --border: #1f2226;
+            --amber: #ffb000;
+            --amber-dim: #7c5600;
+            --bg: #000000;
             --font: 'Fira Code', monospace;
         }
 
@@ -26,312 +20,237 @@
 
         body {
             background-color: var(--bg);
-            color: var(--fg);
+            color: var(--amber);
             font-family: var(--font);
-            font-size: 12px;
+            font-size: 13px;
             overflow: hidden;
             height: 100vh;
             display: flex;
             flex-direction: column;
+            text-shadow: 0 0 5px var(--amber-dim);
         }
 
-        /* ── HEADER SOBRIO ── */
+        /* ── CRT EFFECT ── */
+        body::after {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 9999;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+
         header {
-            background: var(--bg-darker);
-            border-bottom: 1px solid var(--primary);
-            padding: 8px 15px;
+            border-bottom: 2px solid var(--amber);
+            padding: 10px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .sys-info { display: flex; gap: 20px; }
-        .stat-item { display: flex; flex-direction: column; }
-        .stat-label { font-size: 9px; color: var(--secondary); text-transform: uppercase; }
-        .stat-value { font-weight: 700; color: var(--primary); }
+        .header-title { font-weight: 700; font-size: 18px; letter-spacing: 2px; }
 
-        /* ── LAYOUT DE CELDA ── */
+        /* ── TABS ── */
+        .tabs {
+            display: flex;
+            background: var(--bg);
+            border-bottom: 1px solid var(--amber);
+            padding-left: 20px;
+        }
+        .tab {
+            padding: 8px 20px;
+            cursor: pointer;
+            border-right: 1px solid var(--amber);
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .tab:hover { background: var(--amber); color: var(--bg); }
+        .tab.active { background: var(--amber); color: var(--bg); }
+
         main {
             flex: 1;
             display: grid;
-            grid-template-columns: 320px 1fr 300px;
-            gap: 1px;
-            background: var(--border);
+            grid-template-rows: 1fr 200px;
             overflow: hidden;
         }
 
-        section { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
-
-        .panel-header {
-            background: var(--bg-darker);
-            padding: 6px 12px;
-            border-bottom: 1px solid var(--border);
-            color: var(--primary);
-            font-weight: 700;
-            font-size: 10px;
-            text-transform: uppercase;
+        .data-viewer {
+            overflow: auto;
+            border-bottom: 1px solid var(--amber);
         }
 
-        .panel-content { flex: 1; padding: 10px; overflow-y: auto; }
-
-        /* ── TABLA DE ALTA DENSIDAD ── */
-        table { width: 100%; border-collapse: collapse; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
         th {
-            background: var(--bg-darker);
-            color: var(--secondary);
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            color: var(--amber);
             text-align: left;
-            padding: 8px 12px;
-            font-weight: normal;
-            border-bottom: 1px solid var(--border);
+            padding: 10px;
+            border-bottom: 2px solid var(--amber);
+            cursor: pointer;
             text-transform: uppercase;
+            font-size: 11px;
         }
+        th:hover { text-decoration: underline; background: #1a1500; }
+        
         td {
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border);
-            vertical-align: top;
-            line-height: 1.4;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--amber-dim);
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
         }
-        tr:hover { background: rgba(23, 147, 209, 0.05); }
+        tr:hover td { background: #1a1500; }
+        tr.selected td { background: var(--amber-dim); color: #fff; }
 
-        .id-ref { color: var(--primary); font-weight: 700; }
-        .risk-mark { font-weight: 700; font-size: 9px; }
-        .risk-hi { color: var(--err); }
-        .risk-lo { color: var(--accent); }
+        .sort-icon { font-size: 10px; margin-left: 5px; }
 
-        /* ── TERMINAL DE LOGS ── */
-        .log-line { display: flex; gap: 10px; margin-bottom: 2px; font-size: 10px; }
-        .log-ts { color: var(--secondary); }
-        .log-lvl { font-weight: 700; min-width: 35px; }
-        .lvl-inf { color: var(--primary); }
-        .lvl-war { color: var(--warn); }
-        .lvl-err { color: var(--err); }
-
-        /* ── WIDGETS SOBRIOS ── */
-        .data-box {
-            border: 1px solid var(--border);
-            padding: 8px;
-            margin-bottom: 10px;
-            background: var(--bg-darker);
+        /* ── BOTTOM PANEL ── */
+        .bottom-panel {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 1px;
+            background: var(--amber);
         }
-        .data-label { font-size: 9px; color: var(--secondary); text-transform: uppercase; margin-bottom: 4px; }
-        .data-value { color: var(--fg); font-weight: 700; }
+        .panel-sec { background: var(--bg); padding: 10px; overflow-y: auto; }
 
-        /* ── FOOTER ── */
+        .log-line { font-size: 11px; margin-bottom: 2px; }
+        .log-ts { color: var(--amber-dim); }
+        .log-msg { color: var(--amber); }
+
+        .detail-view { font-size: 12px; line-height: 1.5; }
+        .detail-row { display: flex; margin-bottom: 5px; }
+        .detail-key { width: 120px; color: var(--amber-dim); font-weight: 700; text-transform: uppercase; }
+        .detail-val { flex: 1; color: var(--amber); }
+
         footer {
-            background: var(--bg-darker);
-            border-top: 1px solid var(--border);
-            padding: 4px 15px;
-            font-size: 9px;
-            color: var(--secondary);
+            border-top: 1px solid var(--amber);
+            padding: 5px 20px;
+            font-size: 10px;
             display: flex;
             justify-content: space-between;
         }
 
-        /* ── DETALLE SOBREPUESTO (SIN ICONOS) ── */
-        .overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.85);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .modal {
-            background: var(--bg-darker);
-            border: 1px solid var(--primary);
-            width: 800px;
-            max-height: 90vh;
-            overflow-y: auto;
-            padding: 30px;
-        }
-        .modal-header { border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }
-        .modal-title { font-size: 16px; color: var(--primary); font-weight: 700; }
-        .modal-close { float: right; color: var(--secondary); cursor: pointer; }
-
-        .metric-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); }
-        .metric-name { color: var(--secondary); }
-        .metric-val { color: var(--accent); font-weight: 700; }
-
-        /* Scrollbars */
-        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--border); }
+        ::-webkit-scrollbar-thumb { background: var(--amber-dim); }
+        ::-webkit-scrollbar-thumb:hover { background: var(--amber); }
     </style>
 </head>
 <body x-data="zoharApp()" x-init="init()" x-cloak>
 
     <header>
-        <div class="sys-info">
-            <div class="stat-item">
-                <span class="stat-label">Core</span>
-                <span class="stat-value">ZOHAR_ARCH_V2.4</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Uptime</span>
-                <span class="stat-value" x-text="uptime"></span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Estado</span>
-                <span class="stat-value" :style="status.agent_running ? 'color:var(--accent)' : 'color:var(--err)'" 
-                      x-text="status.agent_running ? 'RUNNING' : 'DORMANT'"></span>
-            </div>
-        </div>
-        <div>
-            <span class="stat-label">Host:</span>
-            <span class="stat-value" style="color:var(--secondary)">archlinux-server</span>
+        <div class="header-title">ZOHAR // TERMINAL_DATA_CORE // V1.0</div>
+        <div style="font-size: 12px;">
+            CPU_TEMP: <span x-text="status.cpu_temp || 'N/A'"></span> | 
+            UPTIME: <span x-text="uptime"></span> |
+            MODE: [READ_WRITE]
         </div>
     </header>
 
+    <!-- TAB SELECTOR -->
+    <div class="tabs">
+        <div class="tab" :class="activeTab === 'projects' ? 'active' : ''" @click="setTab('projects')">[ PROJECTS ]</div>
+        <div class="tab" :class="activeTab === 'financial' ? 'active' : ''" @click="setTab('financial')">[ FINANCIAL_CSV ]</div>
+        <div class="tab" :class="activeTab === 'regulatory' ? 'active' : ''" @click="setTab('regulatory')">[ REGULATORY_CSV ]</div>
+    </div>
+
     <main>
-        <!-- [01] CONFIG / QUEUE -->
-        <section style="border-right: 1px solid var(--border);">
-            <div class="panel-header">OPERACIONES_VIGENTES</div>
-            <div class="panel-content">
-                <div class="data-box">
-                    <div class="data-label">Pipeline_Activo</div>
-                    <div class="data-value" x-text="agent.action || '[IDLE]'"></div>
-                </div>
-                <div class="data-box">
-                    <div class="data-label">Documento_Cargado</div>
-                    <div class="data-value" style="font-size:10px; word-break:break-all;" x-text="agent.pdf || 'N/A'"></div>
-                </div>
-                
-                <div style="margin-top:20px;">
-                    <div class="data-label">Procesamiento_Cola (DuckDB)</div>
-                    <div style="height:2px; background:var(--border); margin:10px 0;">
-                        <div :style="'width:' + (diag.services?.queue?.progress_pct || 0) + '%; height:100%; background:var(--primary)'"></div>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; font-size:10px;">
-                        <span>Finalizados: <span style="color:var(--accent)" x-text="diag.services?.queue?.success || 0"></span></span>
-                        <span>Pendientes: <span style="color:var(--primary)" x-text="diag.services?.queue?.pending || 0"></span></span>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- [02] CENTRAL LEDGER -->
-        <section>
-            <div class="panel-header">LIBRO_DE_INTELIGENCIA (SEM_VERIFIED)</div>
-            <div class="panel-content" style="padding:0;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width:120px;">ID_PROYECTO</th>
-                            <th style="width:80px;">RIESGO</th>
-                            <th style="width:120px;">LOCALIDAD</th>
-                            <th>DESCRIPCIÓN_COMPLETA_DE_LA_GACETA</th>
-                            <th style="width:150px;">PROMOVENTE</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <template x-for="p in projects" :key="p.ID_PROYECTO">
-                            <tr @click="selectProject(p)" style="cursor:pointer">
-                                <td>
-                                    <div class="id-ref" x-text="p.ID_PROYECTO"></div>
-                                    <div style="color:var(--secondary); font-size:9px;" x-text="p.ANIO"></div>
-                                </td>
-                                <td>
-                                    <template x-if="p.ID_PROYECTO.includes('E')">
-                                        <span class="risk-mark risk-hi">[ALTO]</span>
-                                    </template>
-                                    <template x-if="!p.ID_PROYECTO.includes('E')">
-                                        <span class="risk-mark risk-lo">[BAJO]</span>
-                                    </template>
-                                </td>
-                                <td>
-                                    <div style="font-weight:700" x-text="p.MUNICIPIO"></div>
-                                    <div style="color:var(--secondary); font-size:10px;" x-text="p.ESTADO"></div>
-                                </td>
-                                <td>
-                                    <div style="color:var(--fg)" x-text="p.PROYECTO"></div>
-                                    <template x-if="p.COORDENADAS">
-                                        <div style="color:var(--primary); font-size:9px; margin-top:4px;" x-text="p.COORDENADAS"></div>
-                                    </template>
-                                </td>
-                                <td>
-                                    <div style="color:var(--primary); font-weight:700;" x-text="p.PROMOVENTE"></div>
-                                    <div style="font-size:9px; color:var(--secondary);" x-text="p.SECTOR"></div>
-                                </td>
-                            </tr>
+        <!-- MAIN DATA TABLE -->
+        <div class="data-viewer">
+            <table>
+                <thead>
+                    <tr>
+                        <template x-for="col in columns">
+                            <th @click="sort(col)">
+                                <span x-text="col.replace(/_/g, ' ')"></span>
+                                <span class="sort-icon" x-show="sortKey === col" x-text="sortAsc ? '▲' : '▼'"></span>
+                            </th>
                         </template>
-                    </tbody>
-                </table>
-            </div>
-        </section>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="row in sortedData">
+                        <tr @click="selectedRow = row" :class="selectedRow === row ? 'selected' : ''">
+                            <template x-for="col in columns">
+                                <td x-text="row[col]"></td>
+                            </template>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
 
-        <!-- [03] ACTIVITY STREAM -->
-        <section style="border-left: 1px solid var(--border);">
-            <div class="panel-header">STREAM_DE_EVENTOS</div>
-            <div class="panel-content" id="logConsole" style="background:var(--bg-darker); line-height:1.2;">
-                <template x-for="log in agentLogs">
-                    <div class="log-line">
-                        <span class="log-ts" x-text="log.ts.slice(11, 19)"></span>
-                        <span class="log-lvl" :class="'lvl-' + log.level.toLowerCase()" x-text="log.level"></span>
-                        <span class="log-msg" x-text="log.msg"></span>
-                    </div>
-                </template>
-            </div>
-        </section>
-    </main>
-
-    <footer>
-        <div>BUILD: 2026.03.17 // ARCH_STABLE_CHANNEL</div>
-        <div x-text="currentTime"></div>
-        <div>ZOHAR_INTEL_SYSTEM // SIN_INTERFERENCIA_REPRESENTACIONAL</div>
-    </footer>
-
-    <!-- MODAL DE DETALLES -->
-    <template x-if="selectedProject">
-        <div class="overlay" @click="selectedProject = null">
-            <div class="modal" @click.stop>
-                <div class="modal-header">
-                    <span class="modal-close" @click="selectedProject = null">[CERRAR]</span>
-                    <div class="modal-title" x-text="selectedProject.ID_PROYECTO"></div>
-                    <div style="color:var(--secondary); font-size:11px;" x-text="selectedProject.PROYECTO"></div>
+        <!-- CONSOLE AND DETAILS -->
+        <div class="bottom-panel">
+            <div class="panel-sec">
+                <div style="color: var(--amber-dim); margin-bottom: 10px; font-weight: 700;">// SYSTEM_ACTIVITY_STREAM</div>
+                <div id="logs">
+                    <template x-for="log in agentLogs">
+                        <div class="log-line">
+                            <span class="log-ts" x-text="log.ts.slice(11, 19)"></span>
+                            <span style="font-weight: 700;" :style="log.level === 'ERR' ? 'color:red' : ''" x-text="' [' + log.level + '] '"></span>
+                            <span class="log-msg" x-text="log.msg"></span>
+                        </div>
+                    </template>
                 </div>
-
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">
-                    <div>
-                        <div class="data-label">Resumen_de_Inteligencia</div>
-                        <div style="line-height:1.6; padding:15px; border:1px solid var(--border); background:var(--bg); color:var(--fg);" 
-                             x-text="selectedProject.INSIGHT || 'No se han generado insights específicos para este nodo.'"></div>
-                    </div>
-                    <div>
-                        <div class="data-label">Análisis_Ambiental_Técnico</div>
-                        <div style="padding:15px; border:1px solid var(--border); background:var(--bg-darker);">
-                            <template x-if="loadingReport">
-                                <div style="color:var(--secondary); animate-pulse;">CARGANDO_REPORTE_TECNICO...</div>
-                            </template>
-                            <template x-if="currentReport">
-                                <div class="metric-row"><span class="metric-name">Dióxido_de_Azufre (SO2)</span><span class="metric-val" x-text="currentReport.metrics.so2.avg.toFixed(3)"></span></div>
-                                <div class="metric-row"><span class="metric-name">Óxidos_Nitrógeno (NOx)</span><span class="metric-val" x-text="currentReport.metrics.nox.avg.toFixed(3)"></span></div>
-                                <div class="metric-row"><span class="metric-name">Mat_Particulado (PM25)</span><span class="metric-val" x-text="currentReport.metrics.pm25.avg.toFixed(3)"></span></div>
-                                <div class="metric-row" style="margin-top:10px;"><span class="metric-name">Riesgo_Identificado</span><span class="metric-val" x-text="currentReport.risk_score + '%'"></span></div>
-                                <div class="metric-row"><span class="metric-name">Ruta_de_Ejecución</span><span class="metric-val" style="color:var(--primary)" x-text="currentReport.execution_path"></span></div>
-                            </template>
-                            <template x-if="!currentReport && !loadingReport">
-                                <div style="color:var(--secondary); font-size:10px;">[SIN DATOS TÉCNICOS ADICIONALES]</div>
+            </div>
+            <div class="panel-sec" style="border-left: 1px solid var(--amber);">
+                <div style="color: var(--amber-dim); margin-bottom: 10px; font-weight: 700;">// RECORD_DETAILS</div>
+                <div class="detail-view">
+                    <template x-if="!selectedRow">
+                        <div style="color: var(--amber-dim); font-style: italic;">[ NO_RECORD_SELECTED ]</div>
+                    </template>
+                    <template x-if="selectedRow">
+                        <div>
+                            <template x-for="(val, key) in selectedRow">
+                                <div class="detail-row">
+                                    <div class="detail-key" x-text="key.replace(/_/g, ' ')"></div>
+                                    <div class="detail-val" x-text="val"></div>
+                                </div>
                             </template>
                         </div>
-                    </div>
+                    </template>
                 </div>
             </div>
         </div>
-    </template>
+    </main>
+
+    <footer>
+        <div x-text="'ZOHAR_CORE: ' + (status.agent_running ? 'LINK_ACTIVE' : 'LINK_OFFLINE')"></div>
+        <div x-text="currentTime"></div>
+        <div>(C) 2026 ZOHAR_INTEL // PRESERVE_INTEGRITY</div>
+    </footer>
 
     <script>
         function zoharApp() {
             return {
-                status: {}, agent: {}, projects: [], agentLogs: [], diag: {},
-                uptime: '00:00:00', currentTime: '', startTime: Date.now(),
-                selectedProject: null, currentReport: null, loadingReport: false,
+                status: {},
+                activeTab: 'projects',
+                data: [],
+                columns: [],
+                agentLogs: [],
+                uptime: '00:00:00',
+                currentTime: '',
+                startTime: Date.now(),
+                selectedRow: null,
+                sortKey: '',
+                sortAsc: true,
 
-                async init() {
+                init() {
                     this.updateTime();
                     this.fetchData();
                     setInterval(() => this.updateTime(), 1000);
-                    setInterval(() => this.fetchData(), 3000);
+                    setInterval(() => this.fetchSidebarData(), 5000);
+                    this.setTab('projects');
                 },
 
                 updateTime() {
@@ -344,30 +263,66 @@
                     this.uptime = `${h}:${m}:${s}`;
                 },
 
-                async fetchData() {
+                async fetchSidebarData() {
+                    const h = { 'bypass-tunnel-reminder': 'true' };
                     try {
-                        const h = { 'bypass-tunnel-reminder': 'true' };
-                        const [s, a, p, l, d] = await Promise.all([
+                        const [s, l] = await Promise.all([
                             fetch('/api/status', { headers: h }).then(r => r.json()),
-                            fetch('/api/agent_state', { headers: h }).then(r => r.json()),
-                            fetch('/api/projects', { headers: h }).then(r => r.json()),
-                            fetch('/api/logs', { headers: h }).then(r => r.json().catch(() => [])),
-                            fetch('/api/diagnostics', { headers: h }).then(r => r.json())
+                            fetch('/api/logs', { headers: h }).then(r => r.json().catch(() => []))
                         ]);
-                        this.status = s; this.agent = a; this.projects = p; this.agentLogs = l.slice(-60); this.diag = d;
-                        this.$nextTick(() => { const el = document.getElementById('logConsole'); if (el) el.scrollTop = el.scrollHeight; });
+                        this.status = s;
+                        this.agentLogs = l.slice(-30);
+                        this.$nextTick(() => {
+                           const el = document.getElementById('logs');
+                           if(el) el.scrollTop = el.scrollHeight;
+                        });
                     } catch (e) {}
                 },
 
-                async selectProject(p) {
-                    this.selectedProject = p;
-                    this.loadingReport = true;
-                    this.currentReport = null;
+                async setTab(tab) {
+                    this.activeTab = tab;
+                    this.data = [];
+                    this.columns = [];
+                    this.selectedRow = null;
+                    const h = { 'bypass-tunnel-reminder': 'true' };
+                    
+                    let url = '/api/projects';
+                    if (tab === 'regulatory') url = '/api/csv_data?type=regulatory';
+                    if (tab === 'financial') url = '/api/csv_data?type=financial';
+
                     try {
-                        const h = { 'bypass-tunnel-reminder': 'true' };
-                        const rep = await fetch(`/proyectos/${p.ID_PROYECTO}/report`, { headers: h }).then(r => r.json());
-                        if (rep && rep.metrics) this.currentReport = rep;
-                    } catch (e) {} finally { this.loadingReport = false; }
+                        const res = await fetch(url, { headers: h }).then(r => r.json());
+                        this.data = res;
+                        if (res.length > 0) {
+                            this.columns = Object.keys(res[0]);
+                        }
+                    } catch (e) {
+                        console.error('Data fetch error:', e);
+                    }
+                },
+
+                sort(key) {
+                    if (this.sortKey === key) {
+                        this.sortAsc = !this.sortAsc;
+                    } else {
+                        this.sortKey = key;
+                        this.sortAsc = true;
+                    }
+                },
+
+                get sortedData() {
+                    if (!this.sortKey) return this.data;
+                    return [...this.data].sort((a, b) => {
+                        let va = a[this.sortKey];
+                        let vb = b[this.sortKey];
+                        if (va < vb) return this.sortAsc ? -1 : 1;
+                        if (va > vb) return this.sortAsc ? 1 : -1;
+                        return 0;
+                    });
+                },
+
+                fetchData() {
+                    this.fetchSidebarData();
                 }
             }
         }

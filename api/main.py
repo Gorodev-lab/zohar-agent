@@ -187,6 +187,31 @@ async def get_project_report(pid: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/csv_data")
+async def get_csv_data(type: str = "regulatory"):
+    """
+    Lee datos de los CSVs locales para el dashboard.
+    types: 'regulatory' (ordenamientos), 'financial' (ingresos)
+    """
+    try:
+        file_map = {
+            "regulatory": BASE_DIR / "ordenamientos_ecologicos_expedidos.csv",
+            "financial": BASE_DIR / "ingresos_2024.csv"
+        }
+        target_file = file_map.get(type)
+        if not target_file or not target_file.exists():
+            return []
+            
+        df = pd.read_csv(target_file)
+        # Limpiar nombres de columnas
+        df.columns = [c.upper().replace(" ", "_") for c in df.columns]
+        # Limitamos a 200 filas para no saturar el DOM
+        df = df.head(200).fillna("")
+        return df.to_dict(orient="records")
+    except Exception as e:
+        print(f"Error reading CSV {type}: {e}")
+        return []
+
 @app.get("/api/diagnostics")
 async def get_diagnostics():
     touch_heartbeat()
