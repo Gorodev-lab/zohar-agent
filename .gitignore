@@ -37,3 +37,6 @@ documentos/
 .env*.local
 .env
 
+api_log.txt
+tunnel_url.txt
+ingresos_2024.csv
