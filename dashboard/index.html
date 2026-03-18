@@ -3,335 +3,830 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZOHAR // TERMINAL_V1 // AMBER_PHOSPHOR</title>
+    <title>ZOHAR // OPERATIONS_CENTER // ESTRATÉGICO_2026</title>
+    <meta name="description" content="Centro de Operaciones ZOHAR - Monitor Estratégico de la Gaceta Ecológica Nacional 2026 - SEMARNAT">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --amber: #ffb000;
-            --amber-dim: #7c5600;
-            --bg: #000000;
-            --font: 'Fira Code', monospace;
-        }
+/* ═══════════════════════════════════════════════════
+   ZOHAR SOVEREIGN TERMINAL — IBM 3270 / OMEGAMON
+   Paleta: Fósforo Ámbar + Turquesa + Rojo Crítico
+   Fuente: IBM Plex Mono — Grid rígido 80×24
+   ═══════════════════════════════════════════════════ */
 
-        [x-cloak] { display: none !important; }
+:root {
+    --amber:      #FFB000;
+    --amber-dim:  #7C5600;
+    --amber-glow: rgba(255,176,0,0.45);
+    --turquoise:  #00FFFF;
+    --turq-dim:   #006666;
+    --green:      #00FF41;
+    --green-dim:  #00802B;
+    --red:        #FF0000;
+    --yellow:     #FFFF00;
+    --bg:         #000000;
+    --bg-cell:    #0A0A00;
+    --font:       'IBM Plex Mono', 'Courier New', monospace;
+    --ch-w:       8.4px;  /* Ancho de carácter mono a 13px */
+    --ch-h:       18px;   /* Altura de línea */
+}
 
-        * { box-sizing: border-box; margin: 0; padding: 0; cursor: default; }
+[x-cloak] { display: none !important; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-            background-color: var(--bg);
-            color: var(--amber);
-            font-family: var(--font);
-            font-size: 13px;
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            text-shadow: 0 0 5px var(--amber-dim);
-        }
+/* ── PHOSPHOR GLOW (text-shadow global) ── */
+body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: var(--ch-h);
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    text-shadow: 0 0 4px var(--amber-glow);
+    cursor: default;
+    -webkit-font-smoothing: none;
+}
 
-        /* ── CRT EFFECT ── */
-        body::after {
-            content: " ";
-            display: block;
-            position: fixed;
-            top: 0; left: 0; bottom: 0; right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 9999;
-            background-size: 100% 2px, 3px 100%;
-            pointer-events: none;
-        }
+/* ── CRT SCANLINES + FLICKER (overlay post-proceso) ── */
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 1px,
+            rgba(0,0,0,0.15) 1px,
+            rgba(0,0,0,0.15) 2px
+        );
+    z-index: 9999;
+    pointer-events: none;
+    will-change: opacity;
+    animation: crt-flicker 8s infinite;
+}
 
-        header {
-            border-bottom: 2px solid var(--amber);
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+@keyframes crt-flicker {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 0.92; }
+    92%      { opacity: 0.88; }
+    93%      { opacity: 0.75; }
+    94%      { opacity: 0.90; }
+}
 
-        .header-title { font-weight: 700; font-size: 18px; letter-spacing: 2px; }
+/* ── VIGNETTE (curvatura CRT simulada) ── */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%);
+    z-index: 9998;
+    pointer-events: none;
+}
 
-        /* ── TABS ── */
-        .tabs {
-            display: flex;
-            background: var(--bg);
-            border-bottom: 1px solid var(--amber);
-            padding-left: 20px;
-        }
-        .tab {
-            padding: 8px 20px;
-            cursor: pointer;
-            border-right: 1px solid var(--amber);
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-        .tab:hover { background: var(--amber); color: var(--bg); }
-        .tab.active { background: var(--amber); color: var(--bg); }
+/* ── CURSOR PARPADEANTE ── */
+@keyframes blink-cursor {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+.cursor-blink {
+    animation: blink-cursor 1s step-end infinite;
+    color: var(--amber);
+}
 
-        main {
-            flex: 1;
-            display: grid;
-            grid-template-rows: 1fr 200px;
-            overflow: hidden;
-        }
+/* ── TYPEWRITER ── */
+@keyframes type-in {
+    from { width: 0; }
+    to   { width: 100%; }
+}
 
-        .data-viewer {
-            overflow: auto;
-            border-bottom: 1px solid var(--amber);
-        }
+/* ═══════════════════════════════════════════════════
+   LAYOUT: HEADER (fila 1) | TABS (fila 2) |
+           DATA (filas 3-21) | LOGS (filas 22-23) |
+           OIA (fila 24)
+   ═══════════════════════════════════════════════════ */
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th {
-            position: sticky;
-            top: 0;
-            background: var(--bg);
-            color: var(--amber);
-            text-align: left;
-            padding: 10px;
-            border-bottom: 2px solid var(--amber);
-            cursor: pointer;
-            text-transform: uppercase;
-            font-size: 11px;
-        }
-        th:hover { text-decoration: underline; background: #1a1500; }
-        
-        td {
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--amber-dim);
-            font-size: 11px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 300px;
-        }
-        tr:hover td { background: #1a1500; }
-        tr.selected td { background: var(--amber-dim); color: #fff; }
+/* ── HEADER — Línea 1: Título + Estado ── */
+.term-header {
+    border-bottom: 1px solid var(--amber-dim);
+    padding: 2px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: var(--ch-h);
+    background: var(--bg);
+    flex-shrink: 0;
+}
+.term-header .sys-id {
+    color: var(--turquoise);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-shadow: 0 0 6px rgba(0,255,255,0.4);
+}
+.term-header .sys-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--amber-dim);
+}
+.term-header .sys-meta .live {
+    color: var(--green);
+    text-shadow: 0 0 4px rgba(0,255,65,0.5);
+}
+.term-header .sys-meta .dead { color: var(--red); }
 
-        .sort-icon { font-size: 10px; margin-left: 5px; }
+/* ── TABS — Línea 2: Navegación bracketada ── */
+.term-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--amber);
+    background: var(--bg);
+    overflow-x: auto;
+    flex-shrink: 0;
+    min-height: var(--ch-h);
+}
+.term-tabs::-webkit-scrollbar { height: 0; }
+.term-tab {
+    padding: 1px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--amber-dim);
+    white-space: nowrap;
+    border-right: 1px solid #1a1500;
+}
+.term-tab:hover { color: var(--amber); background: #1a1500; }
+.term-tab.active {
+    background: var(--amber);
+    color: var(--bg);
+    font-weight: 700;
+    text-shadow: none;
+}
 
-        /* ── BOTTOM PANEL ── */
-        .bottom-panel {
-            display: grid;
-            grid-template-columns: 1fr 400px;
-            gap: 1px;
-            background: var(--amber);
-        }
-        .panel-sec { background: var(--bg); padding: 10px; overflow-y: auto; }
+/* ── MAIN AREA ── */
+.term-main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
 
-        .log-line { font-size: 11px; margin-bottom: 2px; }
-        .log-ts { color: var(--amber-dim); }
-        .log-msg { color: var(--amber); }
+/* ── LEFT: Data + Logs ── */
+.term-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--amber-dim);
+}
 
-        .detail-view { font-size: 12px; line-height: 1.5; }
-        .detail-row { display: flex; margin-bottom: 5px; }
-        .detail-key { width: 120px; color: var(--amber-dim); font-weight: 700; text-transform: uppercase; }
-        .detail-val { flex: 1; color: var(--amber); }
+/* ── SEARCH BAR ── */
+.term-search {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border-bottom: 1px solid #1a1500;
+    background: var(--bg-cell);
+    flex-shrink: 0;
+    min-height: var(--ch-h);
+    font-size: 12px;
+}
+.term-search label {
+    color: var(--turquoise);
+    font-weight: 700;
+    font-size: 11px;
+    text-shadow: 0 0 4px rgba(0,255,255,0.3);
+}
+.term-search input {
+    background: transparent;
+    border: none;
+    color: var(--green);
+    font-family: var(--font);
+    font-size: 12px;
+    outline: none;
+    flex: 1;
+    text-shadow: 0 0 3px rgba(0,255,65,0.3);
+    caret-color: var(--amber);
+}
+.term-search .meta {
+    color: var(--amber-dim);
+    font-size: 10px;
+}
+.term-search .meta b { color: var(--amber); }
 
-        footer {
-            border-top: 1px solid var(--amber);
-            padding: 5px 20px;
-            font-size: 10px;
-            display: flex;
-            justify-content: space-between;
-        }
+/* ── TABLE (Hi-Density) ── */
+.term-data {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg);
+}
+.term-data table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.term-data thead { position: sticky; top: 0; z-index: 5; }
+.term-data th {
+    background: #0a0a00;
+    color: var(--turquoise);
+    text-align: left;
+    padding: 1px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--amber);
+    white-space: nowrap;
+    overflow: hidden;
+    text-shadow: 0 0 3px rgba(0,255,255,0.25);
+}
+.term-data th:hover { color: var(--yellow); }
+.term-data td {
+    padding: 0px 4px;
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-bottom: 1px solid #0a0a00;
+    max-width: 200px;
+}
+.term-data tr { cursor: pointer; }
+.term-data tr:hover td {
+    background: #1a1500;
+}
+/* VIDEO INVERSO para fila seleccionada */
+.term-data tr.sel td {
+    background: var(--amber) !important;
+    color: var(--bg) !important;
+    text-shadow: none;
+}
+/* PRIORIDAD: borde izquierdo ámbar */
+.term-data tr.prio-2 { border-left: 3px solid var(--green); }
+.term-data tr.prio-1 { border-left: 3px solid var(--amber-dim); }
 
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--amber-dim); }
-        ::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+/* ── LOGS (Consola inferior) ── */
+.term-logs {
+    height: 90px;
+    min-height: 54px;
+    background: var(--bg);
+    border-top: 1px solid var(--amber);
+    overflow-y: auto;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    font-size: 11px;
+}
+.term-logs .log-head {
+    color: var(--turquoise);
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 1px;
+    text-shadow: 0 0 3px rgba(0,255,255,0.3);
+}
+.term-logs .log-entry {
+    display: flex;
+    gap: 4px;
+    line-height: 14px;
+}
+.term-logs .log-ts { color: var(--amber-dim); }
+.term-logs .log-lvl-info { color: var(--amber); }
+.term-logs .log-lvl-err {
+    color: var(--bg);
+    background: var(--red);
+    padding: 0 2px;
+    font-weight: 700;
+}
+.term-logs .log-msg { color: var(--amber); }
+
+/* ── RIGHT: Panel de Detalles ── */
+.term-right {
+    width: 320px;
+    min-width: 280px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+}
+.term-right-head {
+    padding: 1px 6px;
+    background: var(--amber);
+    color: var(--bg);
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-shadow: none;
+    min-height: var(--ch-h);
+    flex-shrink: 0;
+}
+.term-right-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 6px;
+}
+.term-right .d-group {
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #111;
+}
+.term-right .d-label {
+    color: var(--turquoise);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 3px rgba(0,255,255,0.2);
+}
+.term-right .d-value {
+    color: var(--amber);
+    font-size: 11px;
+    word-break: break-word;
+    line-height: 14px;
+}
+.term-right .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--amber-dim);
+    font-size: 11px;
+    text-align: center;
+    gap: 6px;
+}
+
+/* ── OIA: Operator Information Area (Línea 24) ── */
+.term-oia {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1px 8px;
+    border-top: 1px solid var(--amber);
+    background: var(--bg);
+    font-size: 10px;
+    color: var(--amber-dim);
+    flex-shrink: 0;
+    min-height: 16px;
+}
+.term-oia b { color: var(--amber); }
+.term-oia .oia-r { color: var(--turquoise); text-shadow: 0 0 3px rgba(0,255,255,0.2); }
+
+/* ── TAGS / BADGES ── */
+.tag-id {
+    color: var(--yellow);
+    font-weight: 700;
+    text-shadow: 0 0 3px rgba(255,255,0,0.3);
+}
+.tag-ok {
+    color: var(--bg);
+    background: var(--green);
+    padding: 0 3px;
+    font-weight: 700;
+    font-size: 10px;
+}
+.tag-warn {
+    color: var(--bg);
+    background: var(--yellow);
+    padding: 0 3px;
+    font-weight: 700;
+    font-size: 10px;
+}
+.tag-crit {
+    color: var(--bg);
+    background: var(--red);
+    padding: 0 3px;
+    font-weight: 700;
+    font-size: 10px;
+}
+.tag-2026 {
+    color: var(--bg);
+    background: var(--amber);
+    padding: 0 3px;
+    font-weight: 700;
+    font-size: 10px;
+}
+
+/* ── BUTTONS ── */
+.btn-t {
+    background: none;
+    border: none;
+    color: var(--amber-dim);
+    font-family: var(--font);
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: 700;
+    padding: 0;
+}
+.btn-t:hover { color: var(--amber); }
+
+/* ── SCROLLBARS (tenues) ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #1a1500; }
+::-webkit-scrollbar-thumb:hover { background: var(--amber-dim); }
+
+/* ── BOOT SCREEN ── */
+.boot-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px 80px;
+    font-size: 13px;
+    color: var(--amber);
+    transition: opacity 0.5s;
+}
+.boot-overlay.done { opacity: 0; pointer-events: none; }
+.boot-line {
+    line-height: 20px;
+    white-space: pre;
+    overflow: hidden;
+}
+
+/* ── LINK STYLE ── */
+a.term-link {
+    color: var(--turquoise);
+    text-decoration: none;
+    font-size: 11px;
+    display: block;
+    padding: 2px 4px;
+    border: 1px solid #1a1a1a;
+    margin-bottom: 2px;
+    font-family: var(--font);
+    cursor: pointer;
+}
+a.term-link:hover {
+    background: #1a1500;
+    border-color: var(--amber-dim);
+    color: var(--amber);
+}
     </style>
 </head>
-<body x-data="zoharApp()" x-init="init()" x-cloak>
+<body x-data="zoharTerminal()" x-init="boot()">
 
-    <header>
-        <div class="header-title">ZOHAR // TERMINAL_DATA_CORE // V1.0</div>
-        <div style="font-size: 12px;">
-            CPU_TEMP: <span x-text="status.cpu_temp || 'N/A'"></span> | 
-            UPTIME: <span x-text="uptime"></span> |
-            MODE: [READ_WRITE]
-        </div>
-    </header>
-
-    <!-- TAB SELECTOR -->
-    <div class="tabs">
-        <div class="tab" :class="activeTab === 'projects' ? 'active' : ''" @click="setTab('projects')">[ PROJECTS ]</div>
-        <div class="tab" :class="activeTab === 'financial' ? 'active' : ''" @click="setTab('financial')">[ FINANCIAL_CSV ]</div>
-        <div class="tab" :class="activeTab === 'regulatory' ? 'active' : ''" @click="setTab('regulatory')">[ REGULATORY_CSV ]</div>
-        <div class="tab" :class="activeTab === 'air_quality' ? 'active' : ''" @click="setTab('air_quality')">[ AIR_QUALITY_DATA ]</div>
-        <a href="/aire" target="_blank" class="tab" style="margin-left:auto; margin-right:0; border-left:1px solid var(--amber); border-right:none; color:inherit; text-decoration:none; display:flex; align-items:center; gap:6px;">
-            🗺️&nbsp;[ MAPA_CALIDAD_AIRE ]
-        </a>
+    <!-- ════════════ BOOT SEQUENCE ════════════ -->
+    <div class="boot-overlay" :class="{ 'done': !booting }" x-show="booting" x-cloak>
+        <template x-for="(line, i) in bootLines">
+            <div class="boot-line" x-text="line"></div>
+        </template>
+        <div class="boot-line"><span class="cursor-blink">█</span></div>
     </div>
 
-    <main>
-        <!-- MAIN DATA TABLE -->
-        <div class="data-viewer">
-            <table>
-                <thead>
-                    <tr>
-                        <template x-for="col in columns">
-                            <th @click="sort(col)">
-                                <span x-text="col.replace(/_/g, ' ')"></span>
-                                <span class="sort-icon" x-show="sortKey === col" x-text="sortAsc ? '▲' : '▼'"></span>
-                            </th>
-                        </template>
-                    </tr>
-                </thead>
-                <tbody>
-                    <template x-for="row in sortedData">
-                        <tr @click="selectedRow = row" :class="selectedRow === row ? 'selected' : ''">
+    <!-- ════════════ HEADER (FILA 1) ════════════ -->
+    <div class="term-header">
+        <div class="sys-id" x-text="t('sys_id')"></div>
+        <div class="sys-meta">
+            <span>[<span :class="status.llama_ok ? 'live' : 'dead'" x-text="status.llama_ok ? '■' : '□'"></span> LLM]</span>
+            <span>[<span :class="status.agent_running ? 'live' : 'dead'" x-text="status.agent_running ? '■' : '□'"></span> AGT]</span>
+            <span>CPU:<b style="color:var(--amber)" x-text="status.cpu_temp || '---'"></b></span>
+            <span>UP:<b style="color:var(--amber)" x-text="uptime"></b></span>
+            <button class="btn-t" @click="toggleLang()" x-text="lang==='es'?'[EN]':'[ES]'"></button>
+        </div>
+    </div>
+
+    <!-- ════════════ TABS (FILA 2) ════════════ -->
+    <div class="term-tabs">
+        <div class="term-tab" :class="activeTab==='historic'?'active':''" @click="setTab('historic')" x-text="t('tab_hist')"></div>
+        <div class="term-tab" :class="activeTab==='projects'?'active':''" @click="setTab('projects')" x-text="t('tab_proj')"></div>
+        <div class="term-tab" :class="activeTab==='regulatory'?'active':''" @click="setTab('regulatory')" x-text="t('tab_reg')"></div>
+        <div class="term-tab" :class="activeTab==='air_quality'?'active':''" @click="setTab('air_quality')" x-text="t('tab_air')"></div>
+        <a href="/aire" target="_blank" class="term-tab" style="color:var(--turquoise);text-decoration:none;" x-text="t('tab_map')"></a>
+    </div>
+
+    <!-- ════════════ MAIN AREA (FILAS 3-23) ════════════ -->
+    <div class="term-main">
+
+        <!-- ──── LEFT: Data Console ──── -->
+        <div class="term-left">
+
+            <!-- SEARCH -->
+            <div class="term-search">
+                <label x-text="t('cmd')"></label>
+                <input type="text" x-model="searchQuery" :placeholder="t('cmd_ph')">
+                <div class="meta"><b x-text="sortedData.length"></b>/<span x-text="data.length"></span></div>
+            </div>
+
+            <!-- TABLE -->
+            <div class="term-data" id="data-scroll">
+                <table>
+                    <thead>
+                        <tr>
                             <template x-for="col in columns">
-                                <td x-text="row[col]"></td>
+                                <th @click="sort(col)" :title="col">
+                                    <span x-text="col.replace(/_/g,' ').substring(0,14)"></span>
+                                    <span x-show="sortKey===col" x-text="sortAsc?'▲':'▼'" style="font-size:8px"></span>
+                                </th>
                             </template>
                         </tr>
-                    </template>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- CONSOLE AND DETAILS -->
-        <div class="bottom-panel">
-            <div class="panel-sec">
-                <div style="color: var(--amber-dim); margin-bottom: 10px; font-weight: 700;">// SYSTEM_ACTIVITY_STREAM</div>
-                <div id="logs">
-                    <template x-for="log in agentLogs">
-                        <div class="log-line">
-                            <span class="log-ts" x-text="log.ts.slice(11, 19)"></span>
-                            <span style="font-weight: 700;" :style="log.level === 'ERR' ? 'color:red' : ''" x-text="' [' + log.level + '] '"></span>
-                            <span class="log-msg" x-text="log.msg"></span>
-                        </div>
-                    </template>
-                </div>
+                    </thead>
+                    <tbody>
+                        <template x-for="(row, idx) in sortedData">
+                            <tr @click="selectedRow=row"
+                                :class="{
+                                    'sel': selectedRow===row,
+                                    'prio-2': isPriority(row)===2,
+                                    'prio-1': isPriority(row)===1
+                                }">
+                                <template x-for="col in columns">
+                                    <td><span x-html="renderCell(row,col)"></span></td>
+                                </template>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
             </div>
-            <div class="panel-sec" style="border-left: 1px solid var(--amber);">
-                <div style="color: var(--amber-dim); margin-bottom: 10px; font-weight: 700;">// RECORD_DETAILS</div>
-                <div class="detail-view">
-                    <template x-if="!selectedRow">
-                        <div style="color: var(--amber-dim); font-style: italic;">[ NO_RECORD_SELECTED ]</div>
-                    </template>
-                    <template x-if="selectedRow">
-                        <div>
-                            <template x-for="(val, key) in selectedRow">
-                                <div class="detail-row">
-                                    <div class="detail-key" x-text="key.replace(/_/g, ' ')"></div>
-                                    <div class="detail-val" x-text="val"></div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-                </div>
+
+            <!-- LOGS -->
+            <div class="term-logs" id="logs">
+                <div class="log-head">┌─ SYSTEM_LOG ──────────────────────────────────────────────────────┐</div>
+                <template x-for="log in agentLogs">
+                    <div class="log-entry">
+                        <span class="log-ts" x-text="(log.ts||'').slice(11,19)"></span>
+                        <span :class="log.level==='ERR'?'log-lvl-err':'log-lvl-info'" x-text="'['+log.level+']'"></span>
+                        <span class="log-msg" x-text="log.msg"></span>
+                    </div>
+                </template>
+                <div class="log-entry"><span class="cursor-blink" style="font-size:12px">█</span></div>
             </div>
         </div>
-    </main>
 
-    <footer>
-        <div x-text="'ZOHAR_CORE: ' + (status.agent_running ? 'LINK_ACTIVE' : 'LINK_OFFLINE')"></div>
-        <div x-text="currentTime"></div>
-        <div>(C) 2026 ZOHAR_INTEL // PRESERVE_INTEGRITY</div>
-    </footer>
+        <!-- ──── RIGHT: Detail Panel ──── -->
+        <div class="term-right">
+            <!-- Header -->
+            <div class="term-right-head">
+                <span x-text="t('det_head')"></span>
+                <button class="btn-t" style="color:var(--bg);font-size:13px" @click="selectedRow=null" x-show="selectedRow">[X]</button>
+            </div>
 
-    <script>
-        function zoharApp() {
-            return {
-                status: {},
-                activeTab: 'projects',
-                data: [],
-                columns: [],
-                agentLogs: [],
-                uptime: '00:00:00',
-                currentTime: '',
-                startTime: Date.now(),
-                selectedRow: null,
-                sortKey: '',
-                sortAsc: true,
+            <!-- Content -->
+            <div class="term-right-body" x-show="selectedRow">
+                <template x-for="(val, key) in selectedRow">
+                    <template x-if="key!=='links' && val">
+                        <div class="d-group">
+                            <div class="d-label" x-text="key.replace(/_/g,' ')"></div>
+                            <div class="d-value" x-text="val"></div>
+                        </div>
+                    </template>
+                </template>
+                <!-- Links -->
+                <template x-if="selectedRow && selectedRow.links">
+                    <div style="margin-top:4px">
+                        <div class="d-label" x-text="t('det_links')"></div>
+                        <template x-for="(lUrl, lKey) in selectedRow.links">
+                            <a :href="lUrl"
+                               target="_blank" class="term-link"
+                               x-text="'→ '+lKey"></a>
+                        </template>
+                    </div>
+                </template>
+            </div>
 
-                init() {
-                    this.updateTime();
-                    this.fetchData();
-                    setInterval(() => this.updateTime(), 1000);
-                    setInterval(() => this.fetchSidebarData(), 5000);
-                    this.setTab('projects');
-                },
+            <!-- Empty State -->
+            <div class="empty-state" x-show="!selectedRow" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--amber-dim);font-size:11px;">
+                <div style="font-size:16px;color:var(--amber-dim)">┌──────────────┐</div>
+                <div style="color:var(--amber-dim)">│ <span x-text="t('no_sel')"></span> │</div>
+                <div style="font-size:16px;color:var(--amber-dim)">└──────────────┘</div>
+            </div>
+        </div>
+    </div>
 
-                updateTime() {
-                    const now = new Date();
-                    this.currentTime = now.toLocaleTimeString('en-US', { hour12: false });
-                    const diff = Math.floor((Date.now() - this.startTime) / 1000);
-                    const h = Math.floor(diff / 3600).toString().padStart(2, '0');
-                    const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
-                    const s = (diff % 60).toString().padStart(2, '0');
-                    this.uptime = `${h}:${m}:${s}`;
-                },
+    <!-- ════════════ OIA: Operator Information Area (FILA 24) ════════════ -->
+    <div class="term-oia">
+        <span>ZOHAR_CORE <b x-text="status.agent_running?'LINK_ACTIVE':'LINK_IDLE'"></b></span>
+        <span>
+            <button class="btn-t" style="font-size:9px" @click="controlAction('agent','restart')">[F5:RESTART]</button>
+            <button class="btn-t" style="font-size:9px" @click="controlAction('agent','stop')">[F6:STOP]</button>
+            <button class="btn-t" style="font-size:9px" @click="controlAction('agent','retry-failed')">[F7:RETRY]</button>
+        </span>
+        <span class="oia-r" x-text="currentTime"></span>
+        <span>(C)2026 ZOHAR_INTEL</span>
+    </div>
 
-                async fetchSidebarData() {
-                    const h = { 'bypass-tunnel-reminder': 'true' };
-                    try {
-                        const [s, l] = await Promise.all([
-                            fetch('/api/status', { headers: h }).then(r => r.json()),
-                            fetch('/api/logs', { headers: h }).then(r => r.json().catch(() => []))
-                        ]);
-                        this.status = s;
-                        this.agentLogs = l.slice(-30);
-                        this.$nextTick(() => {
-                           const el = document.getElementById('logs');
-                           if(el) el.scrollTop = el.scrollHeight;
-                        });
-                    } catch (e) {}
-                },
+<script>
+function zoharTerminal() {
+    return {
+        status: {},
+        activeTab: 'historic',
+        data: [],
+        columns: [],
+        agentLogs: [],
+        uptime: '00:00:00',
+        currentTime: '',
+        startTime: Date.now(),
+        selectedRow: null,
+        sortKey: '',
+        sortAsc: true,
+        searchQuery: '',
+        lang: 'es',
+        booting: true,
+        bootLines: [],
 
-                async setTab(tab) {
-                    this.activeTab = tab;
-                    this.data = [];
-                    this.columns = [];
-                    this.selectedRow = null;
-                    const h = { 'bypass-tunnel-reminder': 'true' };
-                    
-                    let url = '/api/projects';
-                    if (tab === 'regulatory') url = '/api/csv_data?type=regulatory';
-                    if (tab === 'financial') url = '/api/csv_data?type=financial';
-                    if (tab === 'air_quality') url = '/api/csv_data?type=air_quality&limit=50';
-
-                    try {
-                        const res = await fetch(url, { headers: h }).then(r => r.json());
-                        // si es array recortarlo para no saturar AlpineJS (el mapa carga completo)
-                        this.data = tab === 'air_quality' && res.length > 50 ? res.slice(0, 50) : res;
-                        if (this.data.length > 0) {
-                            this.columns = Object.keys(this.data[0]);
-                        }
-                    } catch (e) {
-                        console.error('Data fetch error:', e);
-                    }
-                },
-
-                sort(key) {
-                    if (this.sortKey === key) {
-                        this.sortAsc = !this.sortAsc;
-                    } else {
-                        this.sortKey = key;
-                        this.sortAsc = true;
-                    }
-                },
-
-                get sortedData() {
-                    if (!this.sortKey) return this.data;
-                    return [...this.data].sort((a, b) => {
-                        let va = a[this.sortKey];
-                        let vb = b[this.sortKey];
-                        if (va < vb) return this.sortAsc ? -1 : 1;
-                        if (va > vb) return this.sortAsc ? 1 : -1;
-                        return 0;
-                    });
-                },
-
-                fetchData() {
-                    this.fetchSidebarData();
-                }
+        // ── i18n ──
+        _t: {
+            es: {
+                sys_id:    'ZOHAR // ESTRATÉGICO_2026 // SEMARNAT',
+                tab_hist:  '[ ANÁLISIS_2026 ]',
+                tab_proj:  '[ PROYECTOS ]',
+                tab_reg:   '[ ORD_ECOLÓGICO ]',
+                tab_air:   '[ CALIDAD_AIRE ]',
+                tab_map:   '[ MAPA ↗ ]',
+                cmd:       'CMD>',
+                cmd_ph:    'FILTRO: clave, municipio, promovente...',
+                det_head:  '══ DETALLE ══',
+                det_links: '── ENLACES ──',
+                no_sel:    'SIN SELECCIÓN',
+            },
+            en: {
+                sys_id:    'ZOHAR // STRATEGIC_2026 // SEMARNAT',
+                tab_hist:  '[ ANALYSIS_2026 ]',
+                tab_proj:  '[ PROJECTS ]',
+                tab_reg:   '[ REGULATORY ]',
+                tab_air:   '[ AIR_QUALITY ]',
+                tab_map:   '[ MAP ↗ ]',
+                cmd:       'CMD>',
+                cmd_ph:    'FILTER: key, municipality, promoter...',
+                det_head:  '══ DETAIL ══',
+                det_links: '── LINKS ──',
+                no_sel:    'NO SELECTION',
             }
-        }
-    </script>
+        },
+        t(k) { return this._t[this.lang][k] || k; },
+        toggleLang() { this.lang = this.lang === 'es' ? 'en' : 'es'; },
+
+        // ── BOOT SEQUENCE ──
+        async boot() {
+            const seq = [
+                'ZOHAR INTELLIGENCE SYSTEM v2.2',
+                '════════════════════════════════════════',
+                'POST... IBM Plex Mono [OK]',
+                'INIT KERNEL: AMD A8-7410 APU',
+                'MEM CHECK: 8192MB ................ [OK]',
+                'LOAD MODULE: FastAPI/Uvicorn ..... [OK]',
+                'LOAD MODULE: Alpine.js v3 ........ [OK]',
+                'LOAD MODULE: Supabase Client ..... [OK]',
+                'LINK: monitor_gaceta_eco ......... [OK]',
+                'DB: proyectos=214, aire=10521 .... [OK]',
+                'DATASOURCE: global_air_quality ... [OK]',
+                'FILTER: YEAR=2026, REGION=BCS',
+                '════════════════════════════════════════',
+                'SYSTEM READY. ENTERING OPERATIONS MODE.',
+                ''
+            ];
+            for (let i = 0; i < seq.length; i++) {
+                this.bootLines.push(seq[i]);
+                await new Promise(r => setTimeout(r, 80 + Math.random() * 60));
+            }
+            await new Promise(r => setTimeout(r, 400));
+            this.booting = false;
+            this.initSystem();
+        },
+
+        initSystem() {
+            this.updateTime();
+            this.fetchSidebarData();
+            setInterval(() => this.updateTime(), 1000);
+            setInterval(() => this.fetchSidebarData(), 5000);
+            this.setTab('historic');
+        },
+
+        updateTime() {
+            const now = new Date();
+            this.currentTime = now.toLocaleTimeString('en-US', { hour12: false });
+            const d = Math.floor((Date.now() - this.startTime) / 1000);
+            const h = String(Math.floor(d/3600)).padStart(2,'0');
+            const m = String(Math.floor((d%3600)/60)).padStart(2,'0');
+            const s = String(d%60).padStart(2,'0');
+            this.uptime = `${h}:${m}:${s}`;
+        },
+
+        async fetchSidebarData() {
+            const h = { 'bypass-tunnel-reminder': 'true' };
+            try {
+                const [st, lg] = await Promise.all([
+                    fetch('/api/status', { headers: h }).then(r => r.json()),
+                    fetch('/api/logs', { headers: h }).then(r => r.json().catch(() => []))
+                ]);
+                this.status = st;
+                this.agentLogs = lg.slice(-30);
+                this.$nextTick(() => {
+                    const el = document.getElementById('logs');
+                    if (el) el.scrollTop = el.scrollHeight;
+                });
+            } catch (e) {}
+        },
+
+        async controlAction(svc, act) {
+            try {
+                const res = await fetch(`/api/control/${svc}/${act}`, { method: 'POST', headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
+                this.agentLogs.push({ ts: new Date().toISOString(), level: 'INFO', msg: res.msg || `${act} enviado` });
+                this.$nextTick(() => { const el = document.getElementById('logs'); if(el) el.scrollTop = el.scrollHeight; });
+                this.fetchSidebarData();
+            } catch (e) {
+                this.agentLogs.push({ ts: new Date().toISOString(), level: 'ERR', msg: `CTRL_FAIL: ${act} - ${e.message}` });
+            }
+        },
+
+        async setTab(tab) {
+            this.activeTab = tab;
+            this.data = [];
+            this.columns = [];
+            this.selectedRow = null;
+            const h = { 'bypass-tunnel-reminder': 'true' };
+            let url = '/api/historic_consultations';
+            if (tab === 'projects') url = '/api/projects';
+            if (tab === 'regulatory') url = '/api/csv_data?type=regulatory';
+            if (tab === 'air_quality') url = '/api/csv_data?type=air_quality&limit=50';
+            try {
+                const res = await fetch(url, { headers: h }).then(r => r.json());
+                this.data = res;
+                if (this.data.length > 0) {
+                    this.columns = Object.keys(this.data[0]).filter(k => k !== 'links');
+                }
+            } catch (e) {
+                this.agentLogs.push({ ts: new Date().toISOString(), level: 'ERR', msg: `FETCH_FAIL: ${tab}` });
+            }
+        },
+
+        sort(key) {
+            if (this.sortKey === key) { this.sortAsc = !this.sortAsc; }
+            else { this.sortKey = key; this.sortAsc = true; }
+        },
+
+        isPriority(row) {
+            const s = JSON.stringify(row).toLowerCase();
+            const y = s.includes('2026');
+            const p = s.includes('la paz') || s.includes('baja california sur');
+            if (y && p) return 2;
+            if (y) return 1;
+            return 0;
+        },
+
+        get sortedData() {
+            let f = this.data;
+            const q = this.searchQuery ? this.searchQuery.toLowerCase() : '';
+            if (q) {
+                f = f.filter(r => {
+                    if (this.activeTab === 'historic' && this.isPriority(r) > 0) return true;
+                    return Object.values(r).some(v => String(v).toLowerCase().includes(q));
+                });
+            }
+            return [...f].sort((a, b) => {
+                const pa = this.isPriority(a), pb = this.isPriority(b);
+                if (pa !== pb) return pb - pa;
+                if (this.sortKey) {
+                    let va = a[this.sortKey], vb = b[this.sortKey];
+                    if (va < vb) return this.sortAsc ? -1 : 1;
+                    if (va > vb) return this.sortAsc ? 1 : -1;
+                }
+                return 0;
+            });
+        },
+
+        renderCell(row, key) {
+            const v = row[key];
+            const s = String(v || '');
+
+            // Clave/ID → amarillo intenso
+            if (key.toLowerCase().includes('clave') || key.toLowerCase().includes('id')) {
+                return `<span class="tag-id">${s}</span>`;
+            }
+            // Año/Fecha → badge video inverso
+            if (key.toLowerCase().includes('año') || key === 'ANIO' || s === '2026') {
+                return `<span class="tag-2026">${s}</span>`;
+            }
+            // Estatus
+            if (key.toLowerCase().includes('estatus') || key.toLowerCase().includes('status')) {
+                if (s.includes('VERIFIED') || s.includes('OK') || s.includes('CONCLUIDO')) {
+                    return `<span class="tag-ok">[ OK ]</span>`;
+                }
+                if (s.includes('EXTRACT') || s.includes('PENDING') || s.includes('pending')) {
+                    return `<span class="tag-warn">[..]</span>`;
+                }
+                if (s.includes('FAIL') || s.includes('ERROR') || s.includes('CRIT')) {
+                    return `<span class="tag-crit">[!!]</span>`;
+                }
+                return s;
+            }
+            // Grounded boolean
+            if (key === 'GROUNDED' || key === 'grounded') {
+                return v ? '<span class="tag-ok">[ OK ]</span>' : '<span class="tag-warn">[ -- ]</span>';
+            }
+            // Truncar
+            if (s.length > 45) return s.substring(0, 45) + '…';
+            return s || '─';
+        },
+    }
+}
+</script>
 </body>
 </html>

@@ -2,8 +2,33 @@
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.py" },
-    { "source": "/(.*)", "destination": "/dashboard/$1" }
-  ]
+
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.12"
+      }
+    },
+    {
+      "src": "dashboard/**",
+      "use": "@vercel/static"
+    }
+  ],
+
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    { "src": "/aire",     "dest": "/dashboard/aire.html" },
+    { "src": "/",         "dest": "/dashboard/index.html" },
+    { "src": "/dashboard","dest": "/dashboard/index.html" },
+    { "src": "/(.*)",     "dest": "/dashboard/$1" }
+  ],
+
+  "env": {
+    "VERCEL": "1",
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_KEY": "@supabase_key"
+  }
 }

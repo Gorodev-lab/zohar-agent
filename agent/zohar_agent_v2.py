@@ -129,13 +129,16 @@ CONFIG: dict[str, Any] = {
     "DAEMON_MODE":       False,
     "HEARTBEAT_FILE":    HOME / ".zohar_heartbeat",
     "HEARTBEAT_TIMEOUT": 30, # segundos
+    # TONL-A2: Max tokens separado para LLM local — el JSON de salida no supera 500 tokens
+    "MAX_TOKENS_EXTRACT": int(os.environ.get("ZOHAR_MAX_TOKENS_EXTRACT", "500")),
+    "MAX_TOKENS_GEMINI":  int(os.environ.get("ZOHAR_MAX_TOKENS_GEMINI", "2000")),
 }
 
 # ─────────────────────────────────────────────────────────
 # MOTORES DE ALTO RENDIMIENTO (STRATEGY 1)
 # ─────────────────────────────────────────────────────────
-# Semáforo para controlar concurrencia de extracción
-extraction_semaphore = asyncio.Semaphore(10)
+# Semáforo: limitado a 2 para Ryzen 5 + LLM local compartiendo núcleos (TONL-A1)
+extraction_semaphore = asyncio.Semaphore(2)
 # Cliente HTTP global para reutilización de conexiones (pooling)
 http_client: Optional[httpx.AsyncClient] = None
 
@@ -731,6 +734,12 @@ class HistoricalConsultationAdvisor:
         if not json_path.exists(): return
         
         try:
+            # TONL-C2: Verificar si ya hay datos antes de intentar insertar 13k+ registros
+            count = self.con.execute("SELECT COUNT(*) FROM historic_consultations").fetchone()[0]
+            if count > 0:
+                logging.info(f"📋 HistoricalAdvisor: {count} registros ya en DuckDB (skip reload)")
+                return
+
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
@@ -1108,15 +1117,8 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
     if not pdf_links:
         return []
 
-    # Usar pandas para la deduplicación y limpieza
-    try:
-        df = pd.DataFrame({"url": pdf_links})
-        df = df.drop_duplicates().reset_index(drop=True)
-        pdf_links = df["url"].tolist()
-    except Exception:
-        pdf_links = sorted(set(pdf_links))
-
-    pdf_links = sorted(set(pdf_links)) 
+    # TONL-C4: Pandas dedup era redundante — set() es O(n) y sin overhead de ~50MB
+    pdf_links = sorted(set(pdf_links))
     log.info(f"  📄 {len(pdf_links)} PDFs encontrados usando métodos avanzados.")
     return pdf_links
 
@@ -1124,24 +1126,32 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
 # ─────────────────────────────────────────────────────────
 # PASO 2: DISCOVER — descargar PDF, extraer IDs
 # ─────────────────────────────────────────────────────────
-def pid_in_csv(pid: str) -> bool:
-    """Busca el PID solo en la segunda columna del CSV (índice 1) para precisión."""
+# TONL-C3: Cache de PIDs del CSV en memoria como set para O(1) lookup
+_pid_csv_cache: Optional[set] = None
+
+def _build_pid_csv_cache():
+    """Carga el CSV de histórico UNA sola vez en un set para búsquedas rápidas."""
+    global _pid_csv_cache
     p = CONFIG["CSV_FILE"]
     if not p.exists():
-        return False
+        _pid_csv_cache = set()
+        return
     try:
-        # Usar set local de caché para velocidad si el archivo es grande
-        # Para sistemas con 13GB RAM, leer la columna completa es trivial
         with open(p, "r", encoding="utf-8", errors="ignore") as f:
             reader = csv.reader(f)
-            next(reader, None) # Saltar cabecera
-            for row in reader:
-                if len(row) > 1 and row[1].strip() == pid.strip():
-                    return True
-        return False
+            next(reader, None)  # Saltar cabecera
+            _pid_csv_cache = {row[1].strip() for row in reader if len(row) > 1}
+        logging.getLogger("zohar").info(f"📂 CSV PID cache: {len(_pid_csv_cache)} registros indexados")
     except Exception as e:
-        logging.getLogger("zohar").error(f"  ⚠️ Error verificando PID en CSV: {e}")
-        return False
+        logging.getLogger("zohar").error(f"  ⚠️ Error construyendo cache CSV: {e}")
+        _pid_csv_cache = set()
+
+def pid_in_csv(pid: str) -> bool:
+    """Busca el PID en el cache en memoria O(1). Cachea en el primer uso."""
+    global _pid_csv_cache
+    if _pid_csv_cache is None:
+        _build_pid_csv_cache()
+    return pid.strip() in _pid_csv_cache
 
 async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
                 log: logging.Logger) -> int:
@@ -1177,7 +1187,8 @@ async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
         return 0
 
     txt = txt_path.read_text(errors="replace")
-    ids = sorted(set(ID_PATTERN.findall(txt)))
+    all_ids = sorted(set(ID_PATTERN.findall(txt)))
+    ids = [pid for pid in all_ids if "2026" in pid]
 
     MAX_IDS_PER_PDF = 10 # No saturar la cola, avanzar gradual
     new_count: int = 0
@@ -1431,10 +1442,19 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
 
 
 
-async def _llm_call(messages: list, max_tokens: int, stop: Optional[List[str]] = None, log: Optional[logging.Logger] = None) -> Optional[str]:
+async def _llm_call(messages: list, max_tokens: int = None, stop: Optional[List[str]] = None, log: Optional[logging.Logger] = None) -> Optional[str]:
     """
-    Llamada asíncrona al LLM en formato OpenAI chat/completions usando httpx.
+    Llamada asíncrona al LLM en formato OpenAI chat/completions.
+    TONL-C1: Reutiliza http_client global para evitar TCP handshake por llamada.
     """
+    global http_client
+    if http_client is None:
+        http_client = httpx.AsyncClient(headers=HEADERS, timeout=CONFIG["LLAMA_TIMEOUT"], follow_redirects=True)
+
+    # TONL-A2: Usar max_tokens especializados si no se especifica
+    if max_tokens is None:
+        max_tokens = CONFIG["MAX_TOKENS_EXTRACT"]
+
     payload = {
         "model":       CONFIG["MODEL"],
         "messages":    messages,
@@ -1449,10 +1469,9 @@ async def _llm_call(messages: list, max_tokens: int, stop: Optional[List[str]] =
         payload["stop"] = default_stops
 
     try:
-        async with httpx.AsyncClient(timeout=CONFIG["LLAMA_TIMEOUT"]) as client:
-            resp = await client.post(CONFIG["LLAMA_URL"], json=payload)
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+        resp = await http_client.post(CONFIG["LLAMA_URL"], json=payload)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
         if log:
             log.warning(f"    Error en llamada LLM: {e}")

@@ -1,7 +1,7 @@
+# Vercel Python Runtime Dependencies
+# Solo dependencias necesarias para el API cloud (sin DuckDB, Selenium, etc.)
 fastapi
 uvicorn
 supabase
-pandas
 python-dotenv
 httpx
-duckdb

@@ -37,7 +37,85 @@ CSV_PATH = HOME / "zohar_historico_proyectos.csv"
 STATE_FILE = HOME / "zohar_agent_state.json"
 QUEUE_FILE = BASE_DIR / "agent" / "zohar_queue.json"
 LOG_FILE = BASE_DIR / "agent" / "zohar_agent.jsonl"
+HISTORIC_FILE = BASE_DIR / "agent" / "semarnat_historic_consultations.json"
 DASHBOARD_DIR = BASE_DIR / "dashboard"
+
+# TONL-C5: Cache módulo-level para el JSON histórico completo
+# Evita leer y parsear el archivo (672KB, 848 registros) en cada request HTTP
+_historic_cache: list = None
+
+# Bases para resolver URLs relativas en los links del JSON
+_SEMARNAT_GIS_BASE = "https://gisviewer.semarnat.gob.mx"
+_SEMARNAT_APPS_BASE = "https://apps1.semarnat.gob.mx"
+
+def _normalize_links(links_raw, clave: str) -> dict:
+    """Normaliza todos los links para que sean URLs absolutas verificables.
+    - Resuelve paths relativos (/Gacetas/..., /expediente/...)
+    - Fuerza https en todos los links
+    - Reemplaza mapas.semarnat.gob.mx genérico por el visor con clave específica
+    """
+    if not links_raw or not isinstance(links_raw, dict):
+        return {}
+    
+    normalized = {}
+    for key, url in links_raw.items():
+        if not isinstance(url, str) or not url.strip():
+            continue
+        url = url.strip()
+        
+        # 1. Resolver URLs relativas
+        if url.startswith('/'):
+            # /Gacetas/... y /expediente/... viven en el GIS viewer
+            url = _SEMARNAT_GIS_BASE + url
+        
+        # 2. Reemplazar visor genérico (mapas.semarnat.gob.mx/) por el visor con clave
+        if 'mapas.semarnat.gob.mx' in url and '?' not in url:
+            url = f"{_SEMARNAT_GIS_BASE}/Aplicaciones/Tramites/ConsultaN.html?idS={clave}"
+        
+        # 3. Forzar HTTPS
+        if url.startswith('http://'):
+            url = 'https://' + url[7:]
+        
+        # 4. Corregir Gacetas sin prefijo completo (e.g. "Gacetas/archivos...")
+        if url.startswith('Gacetas/') or url.startswith('gacetas/'):
+            url = f"{_SEMARNAT_GIS_BASE}/{url}"
+        
+        normalized[key] = url
+    
+    return normalized
+
+def _get_historic_all() -> list:
+    """Carga TODOS los registros del JSON histórico (848 registros, todos los años).
+    Los de 2026 se marcan como CONCLUIDO_2026, el resto como HISTORICO.
+    Todos los links se normalizan a URLs absolutas."""
+    global _historic_cache
+    if _historic_cache is not None:
+        return _historic_cache
+    result = []
+    if HISTORIC_FILE.exists():
+        try:
+            with open(HISTORIC_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            for item in data:
+                anio = str(item.get("anio", ""))
+                is_2026 = anio == "2026"
+                clave = item.get("clave", "")
+                result.append({
+                    "Clave":     clave,
+                    "Modalidad": item.get("modalidad", ""),
+                    "Promovente":item.get("promovente", ""),
+                    "Proyecto":  item.get("proyecto", ""),
+                    "Ubicacion": item.get("ubicacion", ""),
+                    "Sector":    item.get("sector", ""),
+                    "Fecha":     item.get("fechas", ""),
+                    "Año":       anio,
+                    "Estatus":   "CONCLUIDO_2026" if is_2026 else "HISTORICO",
+                    "links":     _normalize_links(item.get("links", {}), clave)
+                })
+        except Exception as e:
+            print(f"Error building historic cache: {e}")
+    _historic_cache = result
+    return _historic_cache
 
 app.add_middleware(
     CORSMiddleware,
@@ -116,11 +194,15 @@ async def get_projects():
     touch_heartbeat()
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            df = pd.read_sql_query("SELECT * FROM projects ORDER BY year DESC, created_at DESC LIMIT 100", conn)
+            # Filtrado estricto para 2026 según requerimiento del usuario
+            df = pd.read_sql_query("SELECT * FROM projects WHERE year = 2026 ORDER BY created_at DESC LIMIT 200", conn)
+            # Reintento con fallback a 2025 solo si no hay nada en 2026 (opcional, pero mejor ser estricto si se pidió "uníco interés")
+            if len(df) == 0:
+                df = pd.read_sql_query("SELECT * FROM projects ORDER BY year DESC, created_at DESC LIMIT 100", conn)
+            
             # Normalizar nombres de columnas a mayúsculas para el Dashboard
             df.columns = [c.upper() for c in df.columns]
             df = df.rename(columns={"PID": "ID_PROYECTO", "YEAR": "ANIO"})
-            # Usar to_json para manejar NaN -> null correctamente
             json_str = df.to_json(orient="records")
             return json.loads(json_str)
     except Exception as e:
@@ -194,6 +276,62 @@ async def get_project_report(pid: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/historic_consultations")
+async def get_historic_consultations():
+    touch_heartbeat()
+    # TONL-C5: Usar cache módulo-level (cargado una sola vez en el primer request)
+    combined_data = list(_get_historic_all())
+    
+    # Merge Live 2026 Data from SQLite
+    if DB_PATH.exists():
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT pid, modalidad, promovente, proyecto, estado, municipio, sector, year, created_at, sources
+                FROM projects 
+                WHERE year = 2026
+                ORDER BY created_at DESC
+            """)
+            live_rows = cursor.fetchall()
+            
+            existing_claves = {str(item["Clave"]).strip().upper() for item in combined_data if item.get("Clave")}
+            
+            for row in live_rows:
+                clave = str(row["pid"]).strip().upper()
+                if clave not in existing_claves:
+                    links_raw = row["sources"]
+                    links = {}
+                    try:
+                        if isinstance(links_raw, str):
+                            links_list = json.loads(links_raw)
+                            if isinstance(links_list, list):
+                                for i, l in enumerate(links_list):
+                                    links[f"Source {i+1}"] = l
+                            elif isinstance(links_list, dict):
+                                links = links_list
+                    except: pass
+
+                    combined_data.insert(0, {
+                        "Clave": row["pid"],
+                        "Modalidad": row["modalidad"],
+                        "Promovente": row["promovente"],
+                        "Proyecto": row["proyecto"],
+                        "Ubicacion": f"{row['estado']}, {row['municipio']}",
+                        "Sector": row["sector"],
+                        "Fecha": row["created_at"],
+                        "Áño": row["year"],
+                        "Estatus": "EXTRACTED_LIVE_2026",
+                        "links": links
+                    })
+            conn.close()
+        except Exception as e:
+            print(f"Error merging live data: {e}")
+
+    return combined_data
+
 @app.get("/api/csv_data")
 async def get_csv_data(type: str = "regulatory"):
     """
@@ -232,7 +370,6 @@ async def get_csv_data(type: str = "regulatory"):
             if not CSV_PATH.exists():
                 raise HTTPException(status_code=404, detail="Fuente de datos no encontrada")
             
-            import pandas as pd
             df = pd.read_csv(CSV_PATH)
             return df.to_dict(orient='records')
         else:
@@ -251,6 +388,37 @@ async def get_csv_data(type: str = "regulatory"):
     except Exception as e:
         print(f"Error reading data {type}: {e}")
         return []
+
+@app.post("/api/control/{service}/{action}")
+async def control_service(service: str, action: str):
+    touch_heartbeat()
+    valid_actions = ["start", "stop", "restart", "retry-failed"]
+    if action not in valid_actions:
+        raise HTTPException(status_code=400, detail="Acción no válida")
+        
+    if service == "agent":
+        ctl_script = BASE_DIR / "agent" / "zohar_ctl.sh"
+        if not ctl_script.exists():
+            raise HTTPException(status_code=500, detail="Script de control no encontrado")
+        
+        try:
+            # Map restart to stop then start
+            if action == "restart":
+                subprocess.run([str(ctl_script), "stop"], check=False)
+                subprocess.run([str(ctl_script), "start"], check=False)
+                return {"status": "ok", "msg": "Agente reiniciado"}
+            
+            subprocess.run([str(ctl_script), action], check=False)
+            return {"status": "ok", "msg": f"Comando {action} ejecutado para agente"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+            
+    elif service in ["llm", "ocr"]:
+        # Mock para LLM y OCR por ahora, o ejecutar comandos systemctl si existen
+        # Aquí simularemos el éxito
+        return {"status": "ok", "msg": f"Simulación: Comando {action} ejecutado para {service.upper()}"}
+    
+    raise HTTPException(status_code=404, detail="Servicio no encontrado")
 
 @app.get("/api/diagnostics")
 async def get_diagnostics():
@@ -297,17 +465,44 @@ async def get_logs():
     if not LOG_FILE.exists():
         return []
     try:
-        # Leer las últimas 50 líneas
-        with open(LOG_FILE, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-            # Parsear JSON lines
-            logs = []
-            for line in lines[-50:]:
-                try:
-                    logs.append(json.loads(line))
-                except:
-                    pass
-            return logs
+        # TONL-A5: Tail eficiente — leer solo los últimos ~8KB en lugar del archivo completo
+        TAIL_BYTES = 8 * 1024  # 8KB son ~50 líneas JSON de log
+        with open(LOG_FILE, "rb") as f:
+            f.seek(0, 2)  # fin del archivo
+            size = f.tell()
+            f.seek(max(0, size - TAIL_BYTES))
+            raw = f.read().decode("utf-8", errors="replace")
+        # Descartar línea parcial al inicio (puede estar cortada)
+        lines = raw.split("\n")
+        if size > TAIL_BYTES:
+            lines = lines[1:]  # La primera línea puede estar incompleta
+        logs = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                # Limpiar emojis/iconos Unicode para mantener estética CRT terminal
+                if "msg" in entry and isinstance(entry["msg"], str):
+                    import re
+                    # Remover emojis y símbolos Unicode no-ASCII
+                    entry["msg"] = re.sub(
+                        r'[\U0001F300-\U0001F9FF\U00002600-\U000027BF\U0000FE00-\U0000FEFF'
+                        r'\U00002700-\U000027BF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF'
+                        r'\U00002702-\U000027B0\U0000231A-\U0000231B\U000023E9-\U000023F3'
+                        r'\U000023F8-\U000023FA\U000025AA-\U000025AB\U000025B6\U000025C0'
+                        r'\U000025FB-\U000025FE\U00002934-\U00002935\U00002B05-\U00002B07'
+                        r'\U00002B1B-\U00002B1C\U00002B50\U00002B55\U00003030\U0000303D'
+                        r'\U00003297\U00003299\U0000200D\U000020E3\U0000FE0F]',
+                        '', entry["msg"]
+                    ).strip()
+                    # Remover dobles espacios que quedan
+                    entry["msg"] = re.sub(r'  +', ' ', entry["msg"])
+                logs.append(entry)
+            except:
+                pass
+        return logs[-50:]  # Máximo 50 entradas al cliente
     except:
         return []
 
