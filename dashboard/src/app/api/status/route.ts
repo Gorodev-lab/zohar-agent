@@ -14,13 +14,21 @@ export async function GET() {
   }
 
   try {
-    // 1. Concurrent checks for system and agent status (Non-blocking pattern)
-    const [cpuTemp, llamaOk, agentAlive, sbRes] = await Promise.all([
+    const isVercel = process.env.VERCEL === '1';
+
+    // 1. Concurrent checks for system and agent status
+    const [cpuTempLocal, llamaOkLocal, agentAliveLocal, sbRes] = await Promise.all([
       getCpuTemp(),
       checkLlamaStatus(),
       isAgentAlive(),
       supabase.from('agente_status').select('*').eq('id', 1).single()
     ]);
+
+    // 2. Cloud-Aware Logic: If on Vercel, use Supabase values reported by local agent
+    const cpuTemp = isVercel ? (sbRes.data?.cpu_temp || "N/A") : cpuTempLocal;
+    const uptime = isVercel ? (sbRes.data?.uptime || "00:00:00") : getUptime();
+    const llamaOk = isVercel ? (sbRes.data?.llama_ok ?? false) : llamaOkLocal;
+    const agentAlive = isVercel ? (sbRes.data?.agent_alive ?? false) : agentAliveLocal;
 
     const agentData = {
       pdf: sbRes.data?.pdf || "INACTIVO",
@@ -31,11 +39,11 @@ export async function GET() {
 
     lastStatus = {
       cpu_temp: cpuTemp,
-      uptime: getUptime(),
+      uptime: uptime,
       llama_status: llamaOk ? "ONLINE" : "OFFLINE",
       agent_running: agentAlive,
       llama_ok: llamaOk,
-      mode: "hybrid-all-tactical",
+      mode: isVercel ? "cloud-tactical" : "hybrid-local",
       agent_state: agentData
     };
     lastUpdate = now;

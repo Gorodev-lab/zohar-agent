@@ -1021,12 +1021,49 @@ def http_get_sync(url: str, timeout: int = 45, binary: bool = False):
 # ─────────────────────────────────────────────────────────
 # ESTADO del agente (visible en el dashboard :8081)
 # ─────────────────────────────────────────────────────────
+def get_perf_metrics():
+    """Obtiene métricas de rendimiento del sistema local (Ryzen 5)."""
+    cpu_temp = "N/A"
+    uptime_str = "N/A"
+    llama_ok = False
+    
+    try:
+        # CPU Temp (sensors)
+        try:
+            sensors = subprocess.check_output(['sensors'], stderr=subprocess.STDOUT).decode()
+            match = re.search(r'(?:CPU|temp1|Tdie):\s+\+?([\d.]+)', sensors)
+            if match: cpu_temp = f"{match.group(1)}°C"
+        except: pass
+        
+        # Uptime (/proc/uptime)
+        try:
+            with open('/proc/uptime', 'r') as f:
+                uptime_seconds = float(f.readline().split()[0])
+                hrs = int(uptime_seconds // 3600)
+                mins = int((uptime_seconds % 3600) // 60)
+                secs = int(uptime_seconds % 60)
+                uptime_str = f"{hrs:02}:{mins:02}:{secs:02}"
+        except: pass
+        
+        # Llama Health
+        try:
+            with urllib.request.urlopen(CONFIG["LLAMA_HEALTH"], timeout=2) as r:
+                llama_ok = (r.status == 200)
+        except: pass
+            
+    except Exception: pass
+    return cpu_temp, uptime_str, llama_ok
+
 def report_state(pdf: str, action: str, target: str):
+    cpu_temp, uptime_str, llama_ok = get_perf_metrics()
     state = {
         "pdf":    pdf,
         "action": action,
         "target": target,
         "time":   datetime.datetime.now().strftime("%H:%M:%S"),
+        "cpu_temp": cpu_temp,
+        "uptime":   uptime_str,
+        "llama_ok": llama_ok
     }
     try:
         CONFIG["STATE_FILE"].write_text(json.dumps(state))
@@ -1041,10 +1078,18 @@ def report_state(pdf: str, action: str, target: str):
                         "pdf": s["pdf"],
                         "action": s["action"],
                         "target": s["target"],
+                        "cpu_temp": s["cpu_temp"],
+                        "uptime": s["uptime"],
+                        "llama_ok": s["llama_ok"],
+                        "agent_alive": True,
                         "last_seen": datetime.datetime.now().isoformat()
                     }
                     if supabase_client:
-                        supabase_client.table("agente_status").upsert(payload, on_conflict="id").execute()
+                        try:
+                            supabase_client.table("agente_status").upsert(payload, on_conflict="id").execute()
+                        except Exception as e:
+                            # Loguear error de Supabase si es necesario, pero no detener
+                            pass
                 except Exception:
                     pass
             

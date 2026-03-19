@@ -7,7 +7,7 @@ export async function GET() {
   try {
     // 1. Cargar datos históricos desde el JSON estático
     const jsonPath = path.join(process.cwd(), 'src', 'semarnat_historic_consultations.json');
-    let historicData = [];
+    let historicData: any[] = [];
     
     if (fs.existsSync(jsonPath)) {
       const raw = fs.readFileSync(jsonPath, 'utf8');
@@ -36,7 +36,7 @@ export async function GET() {
       .order('created_at', { ascending: false });
 
     // 3. Merge inteligente (Priorizar Live sobre estático)
-    const existingClaves = new Set(normalizedHistoric.map(h => h.Clave ? h.Clave.toUpperCase() : ""));
+    const existingClaves = new Set(normalizedHistoric.map((h: any) => h.Clave ? h.Clave.toUpperCase() : ""));
     const merged = [...normalizedHistoric];
 
     if (liveData) {
