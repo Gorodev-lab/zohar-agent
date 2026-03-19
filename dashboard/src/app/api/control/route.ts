@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { touchHeartbeat, PATHS } from '@/lib/system';
+import { supabase } from '@/lib/supabase';
 import { execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -8,13 +9,26 @@ export async function POST(req: Request) {
   touchHeartbeat();
   
   const { service, action } = await req.json();
-  const validActions = ["start", "stop", "restart", "retry-failed"];
+  const validActions = ["start", "stop", "restart", "retry-failed", "pause", "resume"];
   
   if (!validActions.includes(action)) {
     return NextResponse.json({ error: "Acción no válida" }, { status: 400 });
   }
 
   if (service === "agent") {
+    if (action === "pause" || action === "resume") {
+      try {
+        const { error } = await supabase
+          .from('agente_status')
+          .upsert({ id: 1, is_paused: action === "pause" }, { onConflict: 'id' });
+        
+        if (error) throw error;
+        return NextResponse.json({ status: "ok", msg: `Agente ${action === "pause" ? "pausado" : "reanudado"}` });
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message }, { status: 500 });
+      }
+    }
+
     const ctlScript = path.join(PATHS.BASE_DIR, 'agent', 'zohar_ctl.sh');
     if (!fs.existsSync(ctlScript)) {
       return NextResponse.json({ error: "Script de control no encontrado" }, { status: 500 });

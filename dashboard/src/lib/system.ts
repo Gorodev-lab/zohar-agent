@@ -70,3 +70,12 @@ export function getUptime(): string {
   const sec = Math.floor(uptime % 60).toString().padStart(2, '0');
   return `${hrs}:${min}:${sec}`;
 }
+
+export async function getDiskSpace(): Promise<string> {
+  try {
+    const { stdout } = await execAsync("df -h / | tail -1 | awk '{print $4}'");
+    return `${stdout.trim()}B Available`;
+  } catch (err) {
+    return 'N/A';
+  }
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getCpuTemp, isAgentAlive, checkLlamaStatus, getUptime } from '@/lib/system';
+import { getCpuTemp, isAgentAlive, checkLlamaStatus, getUptime, getDiskSpace } from '@/lib/system';
 import { supabase } from '@/lib/supabase';
+import os from 'os';
 
 // Simple TTL Cache (1s) to handle high-frequency polling
 let lastStatus: any = null;
@@ -16,13 +17,23 @@ export async function GET() {
   try {
     const isVercel = process.env.VERCEL === '1';
 
-    // 1. Concurrent checks for system and agent status
-    const [cpuTempLocal, llamaOkLocal, agentAliveLocal, sbRes] = await Promise.all([
+    const [cpuTempLocal, llamaOkLocal, agentAliveLocal, sbRes, usageRes, diskSpace] = await Promise.all([
       getCpuTemp(),
       checkLlamaStatus(),
       isAgentAlive(),
-      supabase.from('agente_status').select('*').eq('id', 1).single()
+      supabase.from('agente_status').select('*').eq('id', 1).single(),
+      supabase.from('ai_usage').select('total_tokens, estimated_cost'),
+      getDiskSpace()
     ]);
+
+    // Calculate aggregate usage
+    const totalTokens = (usageRes.data || []).reduce((acc: number, curr: any) => acc + (curr.total_tokens || 0), 0);
+    const totalCost = (usageRes.data || []).reduce((acc: number, curr: any) => acc + (curr.estimated_cost || 0), 0);
+
+    // Calculate memory usage (approx)
+    const memTotal = os.totalmem();
+    const memFree = os.freemem();
+    const memUsedPercent = Math.round(((memTotal - memFree) / memTotal) * 100);
 
     // 2. Cloud-Aware Logic: If on Vercel, use Supabase values reported by local agent
     const cpuTemp = isVercel ? (sbRes.data?.cpu_temp || "N/A") : cpuTempLocal;
@@ -43,6 +54,11 @@ export async function GET() {
       llama_status: llamaOk ? "ONLINE" : "OFFLINE",
       agent_running: agentAlive,
       llama_ok: llamaOk,
+      is_paused: sbRes.data?.is_paused || false,
+      total_tokens: totalTokens,
+      total_cost: totalCost,
+      disk_avail: diskSpace,
+      mem_used: memUsedPercent,
       mode: isVercel ? "cloud-tactical" : "hybrid-local",
       agent_state: agentData
     };

@@ -107,6 +107,7 @@ CONFIG: dict[str, Any] = {
     "TEMP_WARN":         76.0,
     "TEMP_CRIT":         85.0,
     "LLAMA_TIMEOUT":     int(os.environ.get("ZOHAR_LLAMA_TIMEOUT", "300")),
+    "MAX_LOG_SIZE_MB":   50,
     # Menos contexto para modelos pequeños → menos ruido tabular
     "CONTEXT_CHARS":     int(os.environ.get("ZOHAR_CONTEXT_CHARS", "2500")),
     
@@ -121,6 +122,9 @@ CONFIG: dict[str, Any] = {
 
     # Gemini Config
     "GEMINI_MODEL":      "gemini-3-flash-preview",
+
+    # Server Identity
+    "SERVER_NAME":       os.environ.get("SERVER_NAME", "main-server"),
 
     # Ciclo de monitoreo
     "POLL_INTERVAL_MIN": 30,
@@ -1054,7 +1058,25 @@ def get_perf_metrics():
     except Exception: pass
     return cpu_temp, uptime_str, llama_ok
 
-def report_state(pdf: str, action: str, target: str):
+def rotate_logs():
+    """Rota el archivo de logs si excede el tamaño máximo."""
+    log_file = CONFIG["LOG_FILE"]
+    if log_file.exists() and log_file.stat().st_size > CONFIG["MAX_LOG_SIZE_MB"] * 1024 * 1024:
+        try:
+            backup = log_file.with_suffix(".jsonl.bak")
+            log_file.rename(backup)
+            # El logger volverá a crear el archivo en la siguiente escritura
+        except Exception:
+            pass
+
+def get_system_load() -> float:
+    """Retorna el load average del sistema (1 min)."""
+    try:
+        return os.getloadavg()[0]
+    except Exception:
+        return 0.0
+
+def report_state(pdf: str, action: str, target: str, message: str = ""):
     cpu_temp, uptime_str, llama_ok = get_perf_metrics()
     state = {
         "pdf":    pdf,
@@ -1074,7 +1096,7 @@ def report_state(pdf: str, action: str, target: str):
                 try:
                     # Usamos id fijo 1 para que sea un registro único de monitoreo
                     payload = {
-                        "id": 1,
+                        "server_name": s["server_name"] if "server_name" in s else CONFIG["SERVER_NAME"],
                         "pdf": s["pdf"],
                         "action": s["action"],
                         "target": s["target"],
@@ -1086,7 +1108,8 @@ def report_state(pdf: str, action: str, target: str):
                     }
                     if supabase_client:
                         try:
-                            supabase_client.table("agente_status").upsert(payload, on_conflict="id").execute()
+                            # Upsert por server_name (que es único ahora)
+                            supabase_client.table("agente_status").upsert(payload, on_conflict="server_name").execute()
                         except Exception as e:
                             # Loguear error de Supabase si es necesario, pero no detener
                             pass
@@ -1109,6 +1132,52 @@ def is_dashboard_alive() -> bool:
         return (time.time() - mtime) < CONFIG["HEARTBEAT_TIMEOUT"]
     except Exception:
         return False
+
+def check_pause_flag() -> bool:
+    """Verifica si el agente debe pausarse según la bandera en Supabase."""
+    if not supabase_client:
+        return False
+    try:
+        # Prioridad 1: Pausa global (id=1 o server_name='GLOBAL')
+        # Prioridad 2: Pausa específica de este servidor
+        res = supabase_client.table("agente_status").select("is_paused").or_(f"id.eq.1,server_name.eq.{CONFIG['SERVER_NAME']}").execute()
+        if res.data:
+            # Si cualquiera de los registros encontrados dice paused=True, nos pausamos
+            return any(r.get("is_paused", False) for r in res.data)
+    except Exception:
+        pass
+    return False
+
+def record_usage(model: str, prompt_tokens: int, completion_tokens: int):
+    """Registra el uso de tokens en Supabase."""
+    if not supabase_client:
+        return
+    
+    total = prompt_tokens + completion_tokens
+    # Estimación simple de costo (ajustar según modelo)
+    # Gemini Flash: $0.1 / 1M input, $0.4 / 1M output (aprox)
+    # Llama local: $0 (pero lo registramos para consumo de recursos)
+    cost = 0.0
+    if "gemini" in model.lower():
+        cost = (prompt_tokens * 0.1 / 1_000_000) + (completion_tokens * 0.4 / 1_000_000)
+    
+    payload = {
+        "server_name": CONFIG["SERVER_NAME"],
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total,
+        "estimated_cost": cost
+    }
+    
+    def _sync_usage():
+        try:
+            supabase_client.table("ai_usage").insert(payload).execute()
+        except Exception:
+            pass
+            
+    import threading
+    threading.Thread(target=_sync_usage, daemon=True).start()
 
 
 # ─────────────────────────────────────────────────────────
@@ -1516,7 +1585,14 @@ async def _llm_call(messages: list, max_tokens: int = None, stop: Optional[List[
     try:
         resp = await http_client.post(CONFIG["LLAMA_URL"], json=payload)
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        
+        # Registrar consumo
+        usage = data.get("usage", {})
+        if usage:
+            record_usage(CONFIG["MODEL"], usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+            
+        return data["choices"][0]["message"]["content"]
     except Exception as e:
         if log:
             log.warning(f"    Error en llamada LLM: {e}")
@@ -1612,6 +1688,14 @@ def extract_with_gemini(pid: str, context: str, log: logging.Logger) -> Optional
 
         raw = response.text
         
+        # Registrar consumo Gemini
+        if response.usage_metadata:
+            record_usage(
+                CONFIG["GEMINI_MODEL"], 
+                response.usage_metadata.prompt_token_count, 
+                response.usage_metadata.candidates_token_count
+            )
+
         # Extracción JSON robusta para evitar "Expecting value: line 1 column 1"
         json_match = None
         m = re.search(r'```json\s*(.*?)\s*```', raw, re.DOTALL)
@@ -2480,6 +2564,13 @@ async def main():
     if CONFIG["DAEMON_MODE"]:
         log.info(f"HIGH-THROUGHPUT BATCH ESCALATION ACTIVE — Processing temporal index: {target_years}")
         while not _shutdown:
+            # 0. Verificar si el agente está en modo pausa
+            if check_pause_flag():
+                log.info("⏸️ Agente en modo PAUSA por comando central. Esperando 30s...")
+                report_state("PAUSED", "IDLE", "PAUSED BY USER")
+                await asyncio.sleep(30)
+                continue
+
             # 1. Forzar recarga de cola desde disco
             queue = PersistentQueue(CONFIG["QUEUE_FILE"])
             pending_count = len(queue.pending())
@@ -2501,10 +2592,21 @@ async def main():
             
             # 4. Solo dormir si REALMENTE no hay nada más que hacer
             if len(queue.pending()) == 0:
-                poll_s = CONFIG["POLL_INTERVAL_MIN"] * 60
-                log.info(f"No pending operations. Standby mode active for {CONFIG['POLL_INTERVAL_MIN']} minutes.")
+                rotate_logs()
+                load = get_system_load()
+                # Throttling dinámico: si el load es alto, dormimos más
+                base_poll = CONFIG["POLL_INTERVAL_MIN"]
+                if load > 4.0:
+                    base_poll *= 2
+                    log.warning(f"⚠️ Alto load ({load}): Duplicando tiempo de espera.")
+                
+                poll_s = base_poll * 60
+                log.info(f"No pending operations. Standby mode active for {base_poll} minutes.")
                 for _ in range(poll_s):
                     if _shutdown: break
+                    # Verificar pausa durante el sueño largo
+                    if _ % 30 == 0 and check_pause_flag():
+                         break
                     await asyncio.sleep(1)
     else:
         await run_cycle()
