@@ -4,12 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import LogTerminal from './LogTerminal';
+import ProjectsTable from './ProjectsTable';
+import GenericDataTable from './GenericDataTable';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export default function TerminalLayout({ children }: { children: React.ReactNode }) {
+export default function TerminalLayout() {
   const [data, setData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('projects');
   
@@ -28,7 +30,7 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
   }, []);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#0A0A0A] text-[#FFFFFF] overflow-hidden selection:bg-[#FFB000] selection:text-black">
+    <div className="h-screen w-screen flex flex-col bg-[#0A0A0A] text-[#FFFFFF] overflow-hidden selection:bg-[#FFB000] selection:text-black font-mono">
       {/* HEADER (Advanced Tactical Style) */}
       <header className="h-[64px] border-b border-[#222222] flex items-center justify-between px-8 bg-[#111111] shrink-0">
         <div className="flex items-center gap-12 h-full">
@@ -36,19 +38,21 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
             <span className="text-[#FFB000] mr-2">ZOHAR //</span>
             <span className="tracking-tight uppercase bg-[#FFB000] text-black px-2 py-0.5 font-black">ESTRATÉGICO_2026</span>
           </div>
-          <span className="text-[#666666] font-mono text-[12px] hidden md:block tracking-[0.2em] border-l border-[#222222] pl-8">
+          <span className="text-[#666666] font-mono text-[12px] hidden xl:block tracking-[0.2em] border-l border-[#222222] pl-8">
             SEMARNAT_MONITOR_v2.1
           </span>
           
           <nav className="flex items-center gap-2 h-full ml-4">
             {[
               { id: 'projects', label: '[ ANÁLISIS_2026 ]' },
+              { id: 'regulatory', label: '[ REGULATORIO ]' },
+              { id: 'financial', label: '[ FINANCIERO ]' },
               { id: 'map', label: '[ MAPA ↗ ]', link: '/aire' }
             ].map(tab => (
               tab.link ? (
                 <a 
                   key={tab.id} href={tab.link} target="_blank" 
-                  className="px-4 text-[11px] font-bold text-[#FFB000] hover:bg-[#FFB000] hover:text-black transition-all flex items-center h-10 border border-[#222222] bg-[#0A0A0A]"
+                  className="px-4 text-[11px] font-black text-[#FFB000] hover:bg-[#FFB000] hover:text-black transition-all flex items-center h-10 border border-[#222222] bg-[#0A0A0A]"
                 >
                   {tab.label}
                 </a>
@@ -57,8 +61,8 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "px-4 text-[11px] font-bold transition-all flex items-center h-10 border border-[#222222]",
-                    activeTab === tab.id ? "bg-[#FFB000] text-black" : "bg-[#0A0A0A] text-[#666666] hover:border-[#FFB000]"
+                    "px-4 text-[11px] font-black transition-all flex items-center h-10 border border-[#222222] tracking-tighter whitespace-nowrap",
+                    activeTab === tab.id ? "bg-[#FFB000] text-black shadow-[0_0_10px_rgba(255,176,0,0.3)]" : "bg-[#0A0A0A] text-[#666666] hover:border-[#FFB000]"
                   )}
                 >
                   {tab.label}
@@ -105,7 +109,9 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
 
       {/* MID: VIEWPORT */}
       <main className="flex-1 flex overflow-hidden min-h-0 relative">
-        {children}
+        {activeTab === 'projects' && <ProjectsTable />}
+        {activeTab === 'regulatory' && <GenericDataTable type="regulatory" title="REGULATORIO_INTEL" />}
+        {activeTab === 'financial' && <GenericDataTable type="financial" title="FINANCIERO_INTEL" />}
       </main>
 
       {/* BOTTOM: TELEMETRY TERMINAL */}
