@@ -58,23 +58,55 @@ export async function GET(req: Request, { params }: { params: Promise<{ type: st
             });
             return NextResponse.json(result);
         }
-    } else if (type === 'regulatory' || type === 'financial') {
-        const fileMap: any = {
-            regulatory: path.join(PATHS.BASE_DIR, 'ordenamientos_ecologicos_expedidos.csv'),
-            financial: path.join(PATHS.BASE_DIR, 'ingresos_2024.csv')
-        };
-        const target = fileMap[type];
-        if (fs.existsSync(target)) {
-            const raw = fs.readFileSync(target, 'utf8');
-            const lines = raw.split('\n');
-            const headers = lines[0].split(',').map(h => h.trim());
-            const data = lines.slice(1, 201).filter(l => l.trim()).map(line => {
-                const values = line.split(',');
-                const obj: any = {};
-                headers.forEach((h, i) => obj[h] = values[i]?.trim() || "");
-                return obj;
-            });
-            return NextResponse.json(data);
+    } else if (type === 'regulatory') {
+        const { data: sbData, error } = await supabase
+            .from('environmental_zoning')
+            .select('*')
+            .order('consecutivo', { ascending: true })
+            .limit(500);
+        
+        if (sbData && !error) {
+            return NextResponse.json(sbData.map((row: any) => ({
+                "Consecutivo": row.consecutivo,
+                "Estado": row.estado,
+                "Programa": row.programa,
+                "Modalidad": row.modalidad,
+                "Expedicion": row.expedicion,
+                "Superficie (ha)": row.superficie_ha,
+                "Fecha": row.fecha,
+                "fn.superficie (ha)": row.fn_superficie_ha,
+            })));
+        }
+    } else if (type === 'financial') {
+        const { data: sbData, error } = await supabase
+            .from('ingresos_2024')
+            .select('*')
+            .order('no', { ascending: true })
+            .limit(500);
+        
+        if (sbData && !error) {
+            return NextResponse.json(sbData.map((row: any) => ({
+                "Consecutivo": row.no,
+                "Bitácora": row.bitacora,
+                "Clave Proyecto": row.clave,
+                "Promovente": row.promovente,
+                "Nombre Proyecto": row.proyecto,
+                "Modalidad": row.estudio,
+                "Estatus": row.estatus,
+                "Fecha ingreso": row.fecha_ingreso,
+                "Fecha Resolución": row.fecha_resolucion,
+                "Resolución": row.resolucion,
+                "Quién Resolvió": row.tipo_resolucion,
+                "Oficio Resolución": row.folio_resolucion,
+                "Entidad Federativa donde Ingresó": row.entidad_ingreso,
+                "Entidad Federativa Resolución": row.entidad_gestion,
+                "Estado": row.entidad_mas_afectada,
+                "Municipio": row.municipio_mas_afectado,
+                "Días Laborables Transcurridos": row.dia,
+                "Plazo Máximo Días": row.dias,
+                "Situación Plazo": row.eficiencia,
+                "Sector": row.subsector
+            })));
         }
     }
 
