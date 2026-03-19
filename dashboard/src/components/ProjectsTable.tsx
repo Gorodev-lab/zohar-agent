@@ -120,18 +120,18 @@ export default function ProjectsTable() {
         <div className="flex-1 overflow-auto scrollbar-tactical bg-[#050505]">
           <table className="w-full text-left font-mono border-collapse min-w-[1400px]">
             <thead className="sticky top-0 z-20 bg-[#111111]">
-              <tr className="border-b border-[#222222] text-[10px] text-[#666666] font-black uppercase">
-                <th onClick={() => handleSort('id_proyecto')} className="py-3 px-4 w-[150px] sticky left-0 bg-[#111111] z-30 cursor-pointer hover:text-[#FFB000]">
+              <tr className="border-b border-[#222222] text-[9px] text-[#666666] font-black uppercase tracking-tighter">
+                <th onClick={() => handleSort('id_proyecto')} className="py-3 px-4 w-[160px] sticky left-0 bg-[#1a1a1a] z-30 cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">
                   CLAVE {sortConfig?.key === 'id_proyecto' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                 </th>
-                <th onClick={() => handleSort('modalidad')} className="py-3 px-4 w-[180px] cursor-pointer hover:text-[#FFB000]">MODALIDAD</th>
-                <th onClick={() => handleSort('promovente')} className="py-3 px-4 w-[220px] cursor-pointer hover:text-[#FFB000]">PROMOVENTE</th>
-                <th onClick={() => handleSort('proyecto')} className="py-3 px-4 w-[300px] cursor-pointer hover:text-[#FFB000]">PROYECTO</th>
-                <th onClick={() => handleSort('municipio')} className="py-3 px-4 w-[180px] cursor-pointer hover:text-[#FFB000]">UBICACION</th>
-                <th onClick={() => handleSort('sector')} className="py-3 px-4 w-[150px] cursor-pointer hover:text-[#FFB000]">SECTOR</th>
-                <th onClick={() => handleSort('anio')} className="py-3 px-4 w-[80px] cursor-pointer hover:text-[#FFB000]">AÑO</th>
-                <th onClick={() => handleSort('confidence')} className="py-3 px-4 w-[100px] cursor-pointer hover:text-[#FFB000]">INTEL_CONF%</th>
-                <th onClick={() => handleSort('estatus')} className="py-3 px-4 w-[120px] cursor-pointer hover:text-[#FFB000]">ESTATUS</th>
+                <th onClick={() => handleSort('modalidad')} className="py-3 px-4 w-[140px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">MODALIDAD</th>
+                <th onClick={() => handleSort('promovente')} className="py-3 px-4 w-[240px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">PROMOVENTE</th>
+                <th onClick={() => handleSort('proyecto')} className="py-3 px-4 min-w-[350px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">PROYECTO</th>
+                <th onClick={() => handleSort('municipio')} className="py-3 px-4 w-[180px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">UBICACIÓN</th>
+                <th onClick={() => handleSort('sector')} className="py-3 px-4 w-[150px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">SECTOR</th>
+                <th onClick={() => handleSort('anio')} className="py-3 px-4 w-[60px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">AÑO</th>
+                <th onClick={() => handleSort('confidence')} className="py-3 px-4 w-[100px] cursor-pointer hover:text-[#FFB000] border-r border-[#111111]">INTEL%</th>
+                <th onClick={() => handleSort('estatus')} className="py-3 px-4 w-[100px] cursor-pointer hover:text-[#FFB000]">STATUS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#111111]">

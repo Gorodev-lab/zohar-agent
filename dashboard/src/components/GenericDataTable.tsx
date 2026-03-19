@@ -79,11 +79,13 @@ export default function GenericDataTable({ type, title }: GenericDataTableProps)
         <div className="flex-1 overflow-auto scrollbar-tactical bg-[#050505]">
           <table className="w-full text-left font-mono border-collapse">
             <thead className="sticky top-0 z-20 bg-[#111111]">
-              <tr className="border-b border-[#222222] text-[10px] text-[#666666] font-black uppercase">
-                {headers.map(h => (
-                  <th key={h} className="py-2 px-4 whitespace-nowrap">{h.replace(/_/g, ' ')}</th>
-                ))}
-              </tr>
+              <tr className="border-b border-[#222222] text-[9px] text-[#666666] font-black uppercase tracking-tighter">
+              {headers.map(h => (
+                <th key={h} className="py-3 px-4 whitespace-nowrap min-w-[150px] border-r border-[#111111] bg-[#1a1a1a]">
+                  {h.replace(/_/g, ' ')}
+                </th>
+              ))}
+            </tr>
             </thead>
             <tbody className="divide-y divide-[#111111]">
               {filteredData.map((row, i) => {
@@ -98,13 +100,13 @@ export default function GenericDataTable({ type, title }: GenericDataTableProps)
                     )}
                   >
                     {headers.map(h => (
-                      <td key={h} className={cn(
-                        "py-2 px-4 truncate max-w-[300px]",
-                        isSelected ? "text-black font-bold" : "group-hover:text-[#FFB000]"
-                      )}>
-                        {row[h] !== null && row[h] !== undefined ? String(row[h]) : '---'}
-                      </td>
-                    ))}
+                    <td key={h} className={cn(
+                      "py-2 px-4 truncate min-w-[150px] max-w-[400px]",
+                      isSelected ? "text-black font-black bg-[#CC8C00]" : "group-hover:text-[#FFB000]"
+                    )}>
+                      {row[h] !== null && row[h] !== undefined ? String(row[h]) : '---'}
+                    </td>
+                  ))}
                   </tr>
                 );
               })}
