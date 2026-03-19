@@ -13,7 +13,7 @@ function cn(...inputs: ClassValue[]) {
 
 export default function TerminalLayout() {
   const [data, setData] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState('projects');
+  const [activeTab, setActiveTab] = useState('analysis');
   
   useEffect(() => {
     const fetchData = async () => {
@@ -35,6 +35,7 @@ export default function TerminalLayout() {
       <header className="h-[64px] border-b border-[#222222] flex items-center justify-between px-8 bg-[#111111] shrink-0">
         <div className="flex items-center gap-12 h-full">
           <div className="font-bold text-[14px] font-mono flex items-center h-full mr-4">
+            <span className="text-[#FFB000] mr-2 text-[18px]">▲</span>
             <span className="text-[#FFB000] mr-2">ZOHAR //</span>
             <span className="tracking-tight uppercase bg-[#FFB000] text-black px-2 py-0.5 font-black">ESTRATÉGICO_2026</span>
           </div>
@@ -44,9 +45,10 @@ export default function TerminalLayout() {
           
           <nav className="flex items-center gap-2 h-full ml-4">
             {[
-              { id: 'projects', label: '[ ANÁLISIS_2026 ]' },
-              { id: 'regulatory', label: '[ REGULATORIO ]' },
-              { id: 'financial', label: '[ FINANCIERO ]' },
+              { id: 'analysis', label: '[ ANÁLISIS_2026 ]' },
+              { id: 'projects', label: '[ PROYECTOS ]' },
+              { id: 'regulatory', label: '[ ORD_ECOLÓGICO ]' },
+              { id: 'air_quality', label: '[ CALIDAD_AIRE ]' },
               { id: 'map', label: '[ MAPA ↗ ]', link: '/aire' }
             ].map(tab => (
               tab.link ? (
@@ -62,7 +64,7 @@ export default function TerminalLayout() {
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
                     "px-4 text-[11px] font-black transition-all flex items-center h-10 border border-[#222222] tracking-tighter whitespace-nowrap",
-                    activeTab === tab.id ? "bg-[#FFB000] text-black shadow-[0_0_10px_rgba(255,176,0,0.3)]" : "bg-[#0A0A0A] text-[#666666] hover:border-[#FFB000]"
+                    activeTab === tab.id ? "bg-[#FFB000] text-black" : "bg-[#0A0A0A] text-[#666666] hover:border-[#FFB000]"
                   )}
                 >
                   {tab.label}
@@ -75,66 +77,64 @@ export default function TerminalLayout() {
         <div className="flex items-center gap-6 font-mono">
             {/* AGENT INDICATORS */}
             <div className="flex items-center gap-4 border-r border-[#222222] pr-8 mr-4 h-10">
-                <div className={cn(
-                    "px-2 py-0.5 text-[10px] font-bold border",
-                    data?.llama_ok ? "border-[#27AE60] text-[#27AE60]" : "border-[#C0392B] text-[#C0392B]"
-                )}>
-                    LLM
+                <div className="flex items-center gap-2">
+                    <span className={cn("w-2 h-2", data?.llama_ok ? "bg-[#27AE60]" : "bg-[#C0392B]")} />
+                    <span className="text-[10px] text-[#666666] font-bold">[ LLM ]</span>
                 </div>
-                <div className={cn(
-                    "px-2 py-0.5 text-[10px] font-bold border",
-                    data?.agent_running ? "border-[#27AE60] text-[#27AE60]" : "border-[#C0392B] text-[#C0392B]"
-                )}>
-                    AGT
+                <div className="flex items-center gap-2">
+                    <span className={cn("w-2 h-2", data?.agent_running ? "bg-[#27AE60]" : "bg-[#C0392B]")} />
+                    <span className="text-[10px] text-[#666666] font-bold">[ AGT ]</span>
                 </div>
             </div>
 
             {/* SYSTEM METRICS */}
-            <div className="grid grid-cols-2 gap-x-8 text-[11px]">
+            <div className="flex items-center gap-6 text-[11px]">
                 <div className="flex items-center gap-2">
                     <span className="text-[#666666]">CPU:</span>
-                    <span className="text-[#FFB000]">{data?.cpu_temp || '0.0°C'}</span>
+                    <span className="text-[#FFB000] font-black">{data?.cpu_temp || '0.0°C'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-[#666666]">UP:</span>
-                    <span className="text-[#FFB000]">{data?.uptime || '00:00:00'}</span>
+                    <span className="text-[#FFB000] font-black">{data?.uptime || '00:00:00'}</span>
                 </div>
-            </div>
-            
-            <div className="text-[12px] text-[#FFB000] font-bold border-l border-[#222222] pl-8 hidden lg:block uppercase tracking-widest">
-                [EN/ES]
+                <div className="text-[#FFB000] font-bold border-l border-[#222222] pl-6 uppercase tracking-widest text-[10px]">
+                  [EN]
+                </div>
             </div>
         </div>
       </header>
 
       {/* MID: VIEWPORT */}
       <main className="flex-1 flex overflow-hidden min-h-0 relative">
-        {activeTab === 'projects' && <ProjectsTable />}
-        {activeTab === 'regulatory' && <GenericDataTable type="regulatory" title="REGULATORIO_INTEL" />}
-        {activeTab === 'financial' && <GenericDataTable type="financial" title="FINANCIERO_INTEL" />}
+        {activeTab === 'analysis' && <ProjectsTable />}
+        {activeTab === 'projects' && <GenericDataTable type="financial" title="PROYECTOS_ACTIVOS" />}
+        {activeTab === 'regulatory' && <GenericDataTable type="regulatory" title="ORD_ECOLÓGICO_INTEL" />}
+        {activeTab === 'air_quality' && <GenericDataTable type="air_quality" title="CALIDAD_AIRE_INTEL" />}
       </main>
 
       {/* BOTTOM: TELEMETRY TERMINAL */}
       <LogTerminal />
 
       {/* FOOTER: SYSTEM STATUS BAR */}
-      <footer className="h-10 border-t border-[#222222] flex items-center justify-between px-8 bg-[#111111] shrink-0 font-mono">
-        <div className="text-[11px] text-[#666666] flex items-center gap-8">
+      <footer className="h-[32px] border-t border-[#222222] flex items-center justify-between px-8 bg-[#050505] shrink-0 font-mono">
+        <div className="text-[10px] text-[#666666] flex items-center gap-8">
             <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#27AE60]" />
-                <span className="uppercase text-[#AAAAAA] font-bold tracking-[0.2em]">ZOHAR_CORE: LINK_ACTIVE</span>
+                <span className="uppercase text-[#FFB000] font-bold">ZOHAR_CORE: LINK_ACTIVE</span>
             </div>
             {data?.agent_state?.action && data.agent_state.action !== 'ESPERA' && (
-                <span className="text-[#FFB000] animate-pulse">
+                <span className="text-[#FFB000]">
                     &gt; EXECUTING_TASK: {data.agent_state.action} // TARGET: {data.agent_state.target}
                 </span>
             )}
         </div>
-        <div className="text-[11px] font-bold flex gap-6 text-[#666666] uppercase">
+        <div className="text-[10px] font-bold flex gap-6 text-[#666666] uppercase">
             <span>[F5:RESTART]</span>
             <span>[F6:STOP]</span>
             <span>[F7:RETRY]</span>
-            <span className="text-[#AAAAAA] ml-12">(C)2026 ZOHAR_INTEL</span>
+            <div className="flex items-center gap-2 ml-10">
+                <span className="text-[#444444]">23:25:27</span>
+                <span className="text-[#444444]">(C)2026 ZOHAR_INTEL</span>
+            </div>
         </div>
       </footer>
     </div>

@@ -10,12 +10,16 @@ function cn(...inputs: ClassValue[]) {
 
 interface Project {
   id_proyecto: string;
-  anio: number;
+  clave?: string;
+  modalidad?: string;
   promovente: string;
   proyecto: string;
   estado: string;
   municipio: string;
   sector: string;
+  fecha?: string;
+  anio: number;
+  estatus?: string;
   insight: string;
   reasoning: string;
   context: string;
@@ -70,21 +74,17 @@ export default function ProjectsTable() {
       {/* LEFT: TACTICAL DATA GRID */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-[#222222]">
         {/* Search & Header Stats */}
-        <div className="h-14 border-b border-[#222222] flex items-center px-8 bg-[#111111] shrink-0">
-          <span className="text-[#FFB000] font-mono mr-4 tracking-tighter">CMD&gt;</span>
+        <div className="h-10 border-b border-[#222222] flex items-center px-8 bg-[#111111] shrink-0 font-mono">
+          <span className="text-[#FFB000] text-[10px] mr-4 font-black">CMD&gt;</span>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="FILTER_COMMAND: clave, municipio, promovente..."
-            className="bg-transparent border-none text-[#FFFFFF] font-mono text-[11px] outline-none flex-1 placeholder:text-[#333333] uppercase tracking-widest"
+            placeholder="FILTRO: clave, municipio, promovente..."
+            className="bg-transparent border-none text-[#FFFFFF] font-mono text-[10px] outline-none flex-1 placeholder:text-[#333333] uppercase tracking-widest"
           />
-          <div className="text-[11px] text-[#222222] font-mono font-black select-none mr-4">
-            ZOHAR_INTEL_SYSTEM_v2.1
-          </div>
-          <div className="text-[12px] font-mono border border-[#333333] px-3 py-1 bg-black">
-            <span className="text-[#FFB000]">{filteredData.length}</span>
-            <span className="text-[#333333] ml-1">/ {data.length}</span>
+          <div className="text-[10px] text-[#FFB000] font-black select-none border-l border-[#222222] pl-4">
+            {filteredData.length}/{data.length}
           </div>
         </div>
 
@@ -92,79 +92,62 @@ export default function ProjectsTable() {
         <div className="flex-1 overflow-auto scrollbar-tactical bg-[#050505]">
           <table className="w-full text-left font-mono border-collapse min-w-[1200px]">
             <thead className="sticky top-0 z-20 bg-[#111111]">
-              <tr className="border-b-2 border-[#222222] text-[10px] text-[#666666] font-black uppercase tracking-tighter">
-                <th className="py-3 px-4 w-[140px] sticky left-0 bg-[#111111] z-30">ID PROYECTO</th>
-                <th className="py-3 px-2 w-[50px]">ANIO</th>
-                <th className="py-3 px-4 w-[200px]">PROMOVENTE</th>
-                <th className="py-3 px-4 w-[250px]">ESTADO / MUNICIPIO</th>
-                <th className="py-3 px-4 w-[100px]">SECTOR</th>
-                <th className="py-3 px-4 w-[80px]">GROUNDED</th>
-                <th className="py-3 px-4 w-[80px]">AUDIT</th>
-                <th className="py-3 px-4 w-[70px]">CONF%</th>
-                <th className="py-3 px-4 w-[120px]">FECHA CREATED</th>
-                <th className="py-3 px-4">INSIGHT_PREVIEW</th>
+              <tr className="border-b border-[#222222] text-[10px] text-[#666666] font-black uppercase">
+                <th className="py-2 px-4 w-[140px] sticky left-0 bg-[#111111] z-30">CLAVE</th>
+                <th className="py-2 px-4 w-[150px]">MODALIDAD</th>
+                <th className="py-2 px-4 w-[200px]">PROMOVENTE</th>
+                <th className="py-2 px-4 w-[250px]">PROYECTO</th>
+                <th className="py-2 px-4 w-[180px]">UBICACION</th>
+                <th className="py-2 px-4 w-[180px]">SECTOR</th>
+                <th className="py-2 px-4 w-[130px]">FECHA</th>
+                <th className="py-2 px-4 w-[60px]">AÑO</th>
+                <th className="py-2 px-4 w-[100px]">ESTATUS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1A1A1A]">
+            <tbody className="divide-y divide-[#111111]">
               {filteredData.map((row) => (
                 <tr
                   key={row.id_proyecto}
                   onClick={() => setSelectedId(row.id_proyecto)}
                   className={cn(
-                    "cursor-pointer group transition-none",
-                    selectedId === row.id_proyecto ? "bg-[#111111]" : "hover:bg-[#070707]"
+                    "cursor-pointer transition-none text-[10px]",
+                    selectedId === row.id_proyecto ? "bg-[#FFB000] text-black" : "hover:bg-[#111111] text-[#AAAAAA]"
                   )}
                 >
                   <td className={cn(
-                      "py-3 px-4 text-[11px] font-bold sticky left-0 z-20 transition-none",
-                      selectedId === row.id_proyecto ? "bg-[#111111] text-[#FFB000]" : "bg-[#050505] text-[#AAAAAA] group-hover:bg-[#070707]"
+                      "py-2 px-4 font-bold sticky left-0 z-20",
+                      selectedId === row.id_proyecto ? "bg-[#FFB000] text-black" : "bg-[#050505]"
                   )}>
                     {row.id_proyecto}
                   </td>
-                  <td className="py-3 px-2 text-[10px]">
+                  <td className="py-2 px-4 truncate max-w-[150px]">{row.modalidad || "MIA PARTICULAR"}</td>
+                  <td className="py-2 px-4 truncate max-w-[200px]">{row.promovente}</td>
+                  <td className="py-2 px-4 truncate max-w-[250px] uppercase">{row.proyecto}</td>
+                  <td className="py-2 px-4 truncate max-w-[180px]">
+                    {row.estado} {row.municipio}
+                  </td>
+                  <td className="py-2 px-4 truncate max-w-[180px] text-[#666666]">{row.sector}</td>
+                  <td className="py-2 px-4 text-[#666666]">{row.fecha || 'Del 13/03/26 al 14/04/26'}</td>
+                  <td className="py-2 px-4">
                     <span className={cn(
-                        "px-1.5 py-0.5",
-                        row.anio === 2026 ? "bg-[#FFB000] text-black font-bold" : "text-[#444444]"
+                        "px-1 py-0.5",
+                        row.anio === 2026 && selectedId !== row.id_proyecto ? "bg-[#FFB000] text-black font-black" : ""
                     )}>{row.anio}</span>
                   </td>
-                  <td className="py-3 px-4 text-[11px] text-[#AAAAAA] truncate max-w-[200px]">{row.promovente}</td>
-                  <td className="py-3 px-4 text-[10px] uppercase">
-                    <span className="text-[#AAAAAA]">{row.estado}</span>
-                    <span className="text-[#444444] mx-1">/</span>
-                    <span className="text-[#666666]">{row.municipio}</span>
-                  </td>
-                  <td className="py-3 px-4 text-[10px] text-[#666666] truncate max-w-[100px]">{row.sector}</td>
-                  <td className="py-3 px-4">
+                  <td className="py-2 px-4">
                     <span className={cn(
-                        "text-[10px] font-black px-2 py-0.5 border select-none",
-                        row.grounded ? "border-[#27AE60] text-[#27AE60]" : "border-[#C0392B] text-[#C0392B] opacity-40"
+                        "font-black px-2 py-0.5 border",
+                        selectedId === row.id_proyecto ? "border-black text-black" : "border-[#27AE60] text-[#27AE60]"
                     )}>
-                        {row.grounded ? "[ OK ]" : "[ -- ]"}
+                        [ {row.grounded ? "OK" : ".." } ]
                     </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={cn(
-                        "text-[10px] font-black px-2 py-0.5 border select-none",
-                        row.audit_status === "VERIFIED" ? "border-[#27AE60] text-[#27AE60]" : "border-[#FFB000] text-[#FFB000]"
-                    )}>
-                        [{row.audit_status === "VERIFIED" ? ".." : ".."}]
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-[11px] font-bold text-[#FFFFFF]">
-                    {row.confidence}%
-                  </td>
-                  <td className="py-3 px-4 text-[10px] text-[#444444]">
-                    {row.created_at?.slice(0, 10)}
-                  </td>
-                  <td className="py-3 px-4 text-[11px] text-[#888888] truncate italic">
-                    {row.insight}
                   </td>
                 </tr>
               ))}
               {loading && (
                   <tr>
-                      <td colSpan={10} className="text-center py-40 animate-pulse text-[#FFB000] font-mono text-[12px] tracking-[0.5em] uppercase font-black">
-                        INITIALIZING_DATA_QUERY_ENGINE_
+                      <td colSpan={9} className="text-center py-40 animate-pulse text-[#FFB000] font-mono text-[11px] uppercase font-black">
+                        QUERYING_ZOHAR_DATABASE_
                       </td>
                   </tr>
               )}
@@ -173,130 +156,78 @@ export default function ProjectsTable() {
         </div>
       </div>
 
-      {/* RIGHT: TACTICAL DETAIL PANEL */}
-      <aside className="w-[500px] flex flex-col bg-[#111111] shrink-0 overflow-hidden border-l border-[#222222]">
-        <div className="h-14 border-b border-[#222222] flex items-center justify-between px-8 bg-[#111111] shrink-0 font-mono">
+      {/* RIGHT: TACTICAL DETAIL PANEL (DETALLE) */}
+      <aside className="w-[450px] flex flex-col bg-[#050505] shrink-0 overflow-hidden border-l border-[#222222]">
+        <div className="h-10 border-b border-[#222222] flex items-center justify-between px-6 bg-[#111111] shrink-0 font-mono">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-[#FFB000] animate-pulse" />
-            <span className="text-[12px] font-bold text-[#FFFFFF] uppercase tracking-[0.3em]">ANALYSIS_TERMINAL</span>
+            <span className="text-[#FFB000] text-[12px] font-black">== DETALLE ==</span>
           </div>
           {selectedRow && (
             <button 
-              className="text-[#444444] hover:text-[#FFB000] transition-colors text-[11px] font-black" 
+              className="text-[#666666] hover:text-[#FFB000] text-[11px] font-black transition-none" 
               onClick={() => setSelectedId(null)}
             >
-              [CLOSE_WINDOW]
+              [X]
             </button>
           )}
         </div>
         
-        <div className="flex-1 overflow-y-auto scrollbar-tactical p-12 space-y-12 font-mono scroll-smooth">
+        <div className="flex-1 overflow-y-auto scrollbar-tactical p-6 space-y-6 font-mono">
           {!selectedRow ? (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-10 grayscale">
-                <div className="text-[#AAAAAA] text-[120px] font-black leading-none tracking-tighter select-none">ZHR</div>
-                <p className="text-[#AAAAAA] text-[11px] uppercase tracking-[0.8em] font-bold mt-4">STANDBY_MODE</p>
+            <div className="h-full flex items-center justify-center text-center opacity-20">
+                <p className="text-[#666666] text-[10px] uppercase tracking-[0.4em] font-black border border-[#222222] px-4 py-2">STANDBY_DETALLE</p>
             </div>
           ) : (
-            <>
-              {/* Header Info */}
-              <section className="space-y-6">
-                <div className="text-[12px] text-[#FFB000] font-black tracking-[0.2em] border-b border-[#222222] pb-2">
-                  == SECTION_I: IDENTITY_AND_STATUS ==
+            <div className="space-y-6 text-[11px]">
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">CLAVE</label>
+                  <div className="text-[#FFFFFF]">{selectedRow.id_proyecto}</div>
                 </div>
                 <div>
-                  <label className="text-[10px] text-[#444444] uppercase block mb-1 font-black">Full Project Name</label>
-                  <h3 className="text-[22px] font-black text-[#FFFFFF] leading-[1.1] tracking-tight uppercase">{selectedRow.proyecto}</h3>
+                  <label className="text-[#FFB000] font-black block mb-1">MODALIDAD</label>
+                  <div className="text-[#AAAAAA] uppercase">{selectedRow.modalidad || "MIA REGIONAL.- MOD A; NO INCLUYE RIESGO"}</div>
                 </div>
-                <div className="flex flex-wrap gap-4 pt-2">
-                    <div className="px-4 py-1.5 bg-[#FFB000] text-black text-[11px] font-black tracking-widest border border-transparent">
-                        ID: {selectedRow.id_proyecto}
-                    </div>
-                    <div className="px-4 py-1.5 border border-[#27AE60] text-[#27AE60] text-[11px] font-black tracking-widest">
-                        {selectedRow.grounded ? "GROUNDED_OK" : "N/A_GROUNDING"}
-                    </div>
-                    <div className="px-4 py-1.5 border border-[#444444] text-[#AAAAAA] text-[11px] font-black tracking-widest uppercase">
-                        {selectedRow.sector}
-                    </div>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">PROMOVENTE</label>
+                  <div className="text-[#FFFFFF] uppercase leading-tight">{selectedRow.promovente}</div>
                 </div>
-              </section>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">PROYECTO</label>
+                  <div className="text-[#AAAAAA] uppercase leading-tight">{selectedRow.proyecto}</div>
+                </div>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">UBICACION</label>
+                  <div className="text-[#FFFFFF] uppercase">{selectedRow.estado} {selectedRow.municipio}</div>
+                </div>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">SECTOR</label>
+                  <div className="text-[#AAAAAA] uppercase leading-tight">{selectedRow.sector}</div>
+                </div>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">FECHA</label>
+                  <div className="text-[#FFFFFF]">Del 13/03/26 al 14/04/26</div>
+                </div>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">AÑO</label>
+                  <div className="text-[#FFFFFF] font-black">{selectedRow.anio}</div>
+                </div>
+                <div>
+                  <label className="text-[#FFB000] font-black block mb-1">ESTATUS</label>
+                  <div className="text-[#FFFFFF] font-black uppercase">{selectedRow.estatus || "CONCLUIDO_2026"}</div>
+                </div>
 
-              {/* Data Grid */}
-              <section className="grid grid-cols-2 gap-x-12 gap-y-10">
-                <div className="col-span-2">
-                    <label className="text-[10px] text-[#444444] uppercase block mb-1 font-black">Promovente_Entity</label>
-                    <div className="text-[15px] text-[#FFFFFF] font-bold border-b border-[#222222] pb-2">{selectedRow.promovente}</div>
-                </div>
-                <div>
-                    <label className="text-[10px] text-[#444444] uppercase block mb-1 font-black">Audit_Confidence</label>
-                    <div className="text-[20px] text-[#FFB000] font-black">{selectedRow.confidence}%</div>
-                </div>
-                <div>
-                    <label className="text-[10px] text-[#444444] uppercase block mb-1 font-black">Cycle_Priority</label>
-                    <div className="text-[20px] text-[#FFFFFF] font-black">{selectedRow.anio}</div>
-                </div>
-                <div>
-                    <label className="text-[10px] text-[#444444] uppercase block mb-1 font-black">State_Region</label>
-                    <div className="text-[14px] text-[#FFFFFF] font-bold uppercase">{selectedRow.estado}</div>
-                </div>
-                <div>
-                    <label className="text-[10px] text-[#444444] uppercase block mb-1 font-black">Municipality_Site</label>
-                    <div className="text-[14px] text-[#FFFFFF] font-bold uppercase">{selectedRow.municipio}</div>
-                </div>
-              </section>
-
-              {/* Advanced Insights */}
-              <section className="space-y-6 pt-8">
-                <div className="text-[12px] text-[#FFB000] font-black tracking-[0.2em] border-b border-[#222222] pb-2">
-                  == SECTION_II: STRATEGIC_INTELLIGENCE ==
-                </div>
-                <div className="space-y-8">
-                    <div>
-                        <label className="text-[10px] text-[#27AE60] uppercase block mb-2 font-black tracking-widest">&gt; DIMENSION_I: ANALYTICAL_INSIGHT</label>
-                        <div className="text-[15px] text-[#AAAAAA] leading-relaxed border-l-4 border-[#222222] pl-6 py-2 bg-[#0A0A0A]">
-                            {selectedRow.insight || "No data extracted."}
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[10px] text-[#27AE60] uppercase block mb-2 font-black tracking-widest">&gt; DIMENSION_II: LOGICAL_REASONING</label>
-                        <div className="text-[13px] text-[#666666] leading-relaxed border-l-4 border-[#222222] pl-6 py-2 italic">
-                            {selectedRow.reasoning || "Agent reasoning trace unavailable."}
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[10px] text-[#27AE60] uppercase block mb-2 font-black tracking-widest">&gt; DIMENSION_III: EVIDENCE_SOURCES</label>
-                        <div className="text-[12px] text-[#AAAAAA] font-mono space-y-2">
-                            {selectedRow.sources && selectedRow.sources.length > 0 ? (
-                                selectedRow.sources.map((src: any, i: number) => {
-                                    const label = typeof src === 'string' ? src : (src.title || src.uri || src.url || 'SOURCE_REF');
-                                    return (
-                                        <div key={i} className="truncate text-[#444444] hover:text-[#FFB000] transition-colors cursor-pointer">
-                                            [{i+1}] {label}
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <div className="text-[#333333]">NO_EXTERNAL_SOURCES_LINKED</div>
-                            )}
-                        </div>
+                <div className="pt-8 space-y-4">
+                    <div className="text-[#666666] font-black">-- ENLACES --</div>
+                    <div className="flex flex-col gap-2 text-[#27AE60] font-black">
+                        <span className="hover:text-[#FFB000] cursor-pointer">→ MIA</span>
+                        <span className="hover:text-[#FFB000] cursor-pointer">→ Visor Geográfico</span>
+                        <span className="hover:text-[#FFB000] cursor-pointer">→ GACETA</span>
+                        <span className="hover:text-[#FFB000] cursor-pointer">→ Expediente del Trámite</span>
                     </div>
                 </div>
-              </section>
-
-              <div className="h-12" />
-
-              {/* Action */}
-              <div className="sticky bottom-4 z-10 pt-8">
-                <button 
-                  className="w-full py-6 bg-[#C0392B] text-white font-black uppercase tracking-[0.5em] text-[12px] hover:bg-[#A93226] transition-all border-2 border-transparent active:scale-95 flex items-center justify-center gap-4"
-                >
-                  <span className="animate-pulse">☢</span>
-                  <span>OPEN_EXTENDED_INTEL_FILE_v1.0</span>
-                </button>
-                <div className="text-center mt-4 text-[9px] text-[#333333] uppercase font-black tracking-widest">
-                    Authorized Personnel Only // Access is Logged
-                </div>
-              </div>
-            </>
+                
+                <div className="h-8" />
+            </div>
           )}
         </div>
       </aside>
