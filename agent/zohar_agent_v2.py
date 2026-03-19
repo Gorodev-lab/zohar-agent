@@ -1030,6 +1030,8 @@ def get_perf_metrics():
     cpu_temp = "N/A"
     uptime_str = "N/A"
     llama_ok = False
+    disk_avail = "N/A"
+    mem_used = 0
     
     try:
         # CPU Temp (sensors)
@@ -1054,9 +1056,26 @@ def get_perf_metrics():
             with urllib.request.urlopen(CONFIG["LLAMA_HEALTH"], timeout=2) as r:
                 llama_ok = (r.status == 200)
         except: pass
+
+        # Disk Avail
+        try:
+            import shutil
+            _, _, free = shutil.disk_usage("/")
+            disk_avail = f"{free // (2**30)} GB Available"
+        except: pass
+
+        # Mem Used
+        try:
+            if os.path.exists("/proc/meminfo"):
+                with open("/proc/meminfo", "r") as f:
+                    lines = f.readlines()
+                    total = int(lines[0].split()[1])
+                    available = int(lines[2].split()[1])
+                    mem_used = int(((total - available) / total) * 100)
+        except: pass
             
     except Exception: pass
-    return cpu_temp, uptime_str, llama_ok
+    return cpu_temp, uptime_str, llama_ok, disk_avail, mem_used
 
 def rotate_logs():
     """Rota el archivo de logs si excede el tamaño máximo."""
@@ -1077,7 +1096,7 @@ def get_system_load() -> float:
         return 0.0
 
 def report_state(pdf: str, action: str, target: str, message: str = ""):
-    cpu_temp, uptime_str, llama_ok = get_perf_metrics()
+    cpu_temp, uptime_str, llama_ok, disk_avail, mem_used = get_perf_metrics()
     state = {
         "pdf":    pdf,
         "action": action,
@@ -1085,7 +1104,9 @@ def report_state(pdf: str, action: str, target: str, message: str = ""):
         "time":   datetime.datetime.now().strftime("%H:%M:%S"),
         "cpu_temp": cpu_temp,
         "uptime":   uptime_str,
-        "llama_ok": llama_ok
+        "llama_ok": llama_ok,
+        "disk_avail": disk_avail,
+        "mem_used": mem_used
     }
     try:
         CONFIG["STATE_FILE"].write_text(json.dumps(state))
@@ -1103,6 +1124,8 @@ def report_state(pdf: str, action: str, target: str, message: str = ""):
                         "cpu_temp": s["cpu_temp"],
                         "uptime": s["uptime"],
                         "llama_ok": s["llama_ok"],
+                        "disk_avail": s["disk_avail"],
+                        "mem_used": s["mem_used"],
                         "agent_alive": True,
                         "last_seen": datetime.datetime.now().isoformat()
                     }
