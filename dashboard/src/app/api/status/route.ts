@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCpuTemp, isAgentAlive, checkLlamaStatus } from '@/lib/system';
+import { getCpuTemp, isAgentAlive, checkLlamaStatus, getUptime } from '@/lib/system';
 import { supabase } from '@/lib/supabase';
 
 // Simple TTL Cache (1s) to handle high-frequency polling
@@ -31,10 +31,11 @@ export async function GET() {
 
     lastStatus = {
       cpu_temp: cpuTemp,
+      uptime: getUptime(),
       llama_status: llamaOk ? "ONLINE" : "OFFLINE",
       agent_running: agentAlive,
       llama_ok: llamaOk,
-      mode: "hybrid-nextjs",
+      mode: "hybrid-all-tactical",
       agent_state: agentData
     };
     lastUpdate = now;

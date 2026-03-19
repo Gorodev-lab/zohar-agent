@@ -62,3 +62,11 @@ export async function isAgentAlive(): Promise<boolean> {
     return false;
   }
 }
+
+export function getUptime(): string {
+  const uptime = os.uptime();
+  const hrs = Math.floor(uptime / 3600).toString().padStart(2, '0');
+  const min = Math.floor((uptime % 3600) / 60).toString().padStart(2, '0');
+  const sec = Math.floor(uptime % 60).toString().padStart(2, '0');
+  return `${hrs}:${min}:${sec}`;
+}
