@@ -29,6 +29,7 @@ interface Project {
   auditor: string;
   confidence: number;
   coordinates: string;
+  description?: string;
   created_at?: string;
 }
 
@@ -149,17 +150,17 @@ export default function ProjectsTable() {
                   )}>
                     {row.id_proyecto}
                   </td>
-                  <td className="py-3 px-4 truncate">{row.modalidad || "PROYECTO_ESTÁNDAR"}</td>
-                  <td className="py-3 px-4 truncate">{row.promovente}</td>
-                  <td className="py-3 px-4 truncate uppercase font-bold">{row.proyecto}</td>
-                  <td className="py-3 px-4 truncate">
-                    {row.estado} / {row.municipio}
+                  <td className="py-2 px-4 truncate text-[#BBBBBB]">{row.modalidad || "ESTÁNDAR"}</td>
+                  <td className="py-2 px-4 truncate text-[#BBBBBB]">{row.promovente}</td>
+                  <td className="py-2 px-4 truncate uppercase font-bold text-[#FFFFFF]">{row.proyecto}</td>
+                  <td className="py-2 px-4 truncate text-[#BBBBBB]">
+                    {row.municipio}, {row.estado}
                   </td>
-                  <td className="py-3 px-4 truncate text-[#666666]">{row.sector}</td>
-                  <td className="py-3 px-4">
+                  <td className="py-2 px-4 truncate text-[#666666]">{row.sector}</td>
+                  <td className="py-2 px-4">
                     <span className={cn(
                         "px-1 py-0.5 font-black",
-                        row.anio === 2026 && selectedId !== row.id_proyecto ? "text-[#FFB000] border border-[#FFB000]" : ""
+                        row.anio === 2026 ? "bg-[#FFB000] text-black" : "text-[#666666] border border-[#333333]"
                     )}>{row.anio}</span>
                   </td>
                   <td className="py-3 px-4">
@@ -173,13 +174,16 @@ export default function ProjectsTable() {
                         <span className="font-bold">{row.confidence}%</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4">
-                    <span className={cn(
-                        "font-black px-2 py-0.5 border text-[9px]",
-                        selectedId === row.id_proyecto ? "border-black text-black" : "border-[#27AE60] text-[#27AE60]"
-                    )}>
-                        [{row.estatus || "ACTIVO_SCAN"}]
-                    </span>
+                  <td className="py-2 px-4">
+                    {row.anio === 2026 ? (
+                      <span className="font-black px-2 py-0.5 bg-[#27AE60] text-black text-[9px] border border-[#27AE60]">
+                        [ OK ]
+                      </span>
+                    ) : (
+                      <span className="font-black px-2 py-0.5 text-[#666666] text-[9px] border border-[#333333]">
+                        HISTORICO
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -195,136 +199,103 @@ export default function ProjectsTable() {
         </div>
       </div>
 
-      {/* RIGHT: TACTICAL DETAIL PANEL (DETALLE MEJORADO) */}
-      <aside className="w-[500px] flex flex-col bg-[#050505] shrink-0 overflow-hidden border-l border-[#222222]">
-        <div className="h-12 border-b border-[#222222] flex items-center justify-between px-8 bg-[#111111] shrink-0 font-mono">
-          <div className="flex items-center gap-3">
-            <span className="w-3 h-3 bg-[#FFB000]" />
-            <span className="text-[#FFB000] text-[13px] font-black uppercase tracking-[0.2em]">INTEL_DETALLE: PROYECTO</span>
-          </div>
-          {selectedRow && (
-            <button 
-              className="text-[#666666] hover:text-[#FFFFFF] text-[11px] font-black transition-none border border-[#333333] px-2 py-0.5" 
-              onClick={() => setSelectedId(null)}
-            >
-              [X] CERRAR
-            </button>
-          )}
+      {/* RIGHT: TACTICAL DETAIL PANEL (MATCHING 8081 AGENT CONSOLE) */}
+      <aside className={cn(
+        "bg-[#050505] shrink-0 overflow-hidden border-l border-[#222222] font-mono transition-all duration-300 flex flex-col",
+        selectedId ? "w-[450px]" : "w-0 border-none"
+      )}>
+        <div className="h-10 border-b border-[#222222] flex items-center justify-between px-6 bg-[#111111] shrink-0">
+          <span className="text-[#FFB000] text-[12px] font-black tracking-widest uppercase italic">== DETALLE ==</span>
+          <button 
+            className="text-[#666666] hover:text-[#FFFFFF] text-[11px] font-black px-2 py-0.5 border border-transparent hover:border-[#333333]" 
+            onClick={() => setSelectedId(null)}
+          >
+            [X]
+          </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto scrollbar-tactical p-10 space-y-10 font-mono">
-          {!selectedRow ? (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-10">
-                <div className="text-[#666666] text-[80px] font-black mb-4">ZHR</div>
-                <p className="text-[#666666] text-[10px] uppercase tracking-[0.8em] font-black border border-[#222222] px-6 py-3">ESPERANDO_SELECCION</p>
-            </div>
-          ) : (
-            <div className="space-y-12 animate-in fade-in transition-all">
-                {/* SECCION I: IDENTITY */}
-                <section className="space-y-6">
-                    <div className="flex items-center justify-between border-b border-[#222222] pb-2">
-                        <span className="text-[12px] text-[#FFB000] font-black tracking-widest">== IDENTITY_ID: {selectedRow.id_proyecto} ==</span>
-                        <span className="text-[9px] text-[#444444] font-black font-mono">HASH_{selectedRow.id_proyecto.slice(-4)}</span>
-                    </div>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-[9px] text-[#555555] font-black uppercase tracking-widest block mb-1">Nombre Completo del Proyecto</label>
-                            <h2 className="text-[20px] text-[#FFFFFF] font-black leading-tight uppercase italic">{selectedRow.proyecto}</h2>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-3 bg-[#111111] border border-[#222222]">
-                                <label className="text-[8px] text-[#444444] font-black uppercase block mb-1">Modalidad de Trámite</label>
-                                <span className="text-[10px] text-[#AAAAAA] font-bold block">{selectedRow.modalidad || "ESTÁNDAR_ZHR"}</span>
-                            </div>
-                            <div className="p-3 bg-[#111111] border border-[#222222]">
-                                <label className="text-[8px] text-[#444444] font-black uppercase block mb-1">Año Ciclo</label>
-                                <span className="text-[16px] text-[#FFFFFF] font-black block">{selectedRow.anio}</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
+        <div className="flex-1 overflow-y-auto scrollbar-tactical p-6 space-y-6">
+          {selectedRow && (
+            <div className="space-y-6 text-[11px] leading-tight animate-in fade-in duration-300">
+                <div>
+                    <h2 className="text-[#FFFFFF] font-black text-[14px] uppercase border-b border-[#222222] pb-1 mb-4 italic leading-tight">
+                      {selectedRow.promovente}
+                    </h2>
+                </div>
 
-                {/* SECCION II: ANALYTICS & CONFIDENCE */}
-                <section className="space-y-6 bg-[#080808] p-6 border border-[#111111]">
-                    <div className="text-[11px] text-[#FFB000] font-black tracking-widest border-b border-[#222222] pb-2">== AI_ANALYTICS_CONFIDENCE ==</div>
-                    <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">PROYECTO</label>
+                        <div className="text-[#FFB000] font-black uppercase text-[12px] italic leading-tight">{selectedRow.proyecto}</div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="text-[9px] text-[#555555] font-black block mb-2">SCORE_DE_CONFIANZA</label>
-                            <div className="relative h-20 w-20 flex items-center justify-center border-4 border-[#111111]">
-                                <div 
-                                    className="absolute inset-0 bg-[#FFB000]/10" 
-                                    style={{ height: `${selectedRow.confidence}%`, top: 'auto' }}
-                                />
-                                <span className="text-[24px] text-[#FFB000] font-black relative z-10">{selectedRow.confidence}%</span>
+                            <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">ESTADO</label>
+                            <div className="text-[#FFB000] font-black uppercase">{selectedRow.estado}</div>
+                        </div>
+                        <div>
+                            <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">MUNICIPIO</label>
+                            <div className="text-[#FFB000] font-black uppercase">{selectedRow.municipio}</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">SECTOR</label>
+                        <div className="text-[#FFB000] font-black uppercase">{selectedRow.sector}</div>
+                    </div>
+
+                    <div>
+                        <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">ESTATUS</label>
+                        <div className={cn(
+                          "font-black inline-block px-2 py-0.5 text-[10px]",
+                          selectedRow.anio === 2026 ? "bg-[#27AE60] text-black" : "text-[#666666] border border-[#333333]"
+                        )}>
+                          {selectedRow.anio === 2026 ? "[ OK ]" : "HISTORICO"}
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 border-t border-[#111111] pt-4">
+                        <div>
+                            <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">INSIGHT (IA)</label>
+                            <div className="text-[#AAAAAA] leading-normal font-bold italic border-l-2 border-[#FFB000] pl-4 py-1">
+                                {selectedRow.insight || "Detectando profundidad de impacto..."}
                             </div>
                         </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-[9px] text-[#555555] font-black block mb-1">STATUS_VERIFICACION</label>
-                                <div className="text-[12px] text-[#27AE60] font-black flex items-center gap-2">
-                                    <span className="w-2 h-2 bg-[#27AE60] rounded-full" />
-                                    {selectedRow.grounded ? "GROUNDED_AND_VERIFIED" : "PENDING_VALIDATION"}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-[9px] text-[#555555] font-black block mb-1">NIVEL_DE_RIESGO</label>
-                                <div className={cn(
-                                    "text-[12px] font-black px-2 py-0.5 border inline-block",
-                                    selectedRow.confidence > 90 ? "text-[#27AE60] border-[#27AE60]" : "text-[#E67E22] border-[#E67E22]"
-                                )}>
-                                    {selectedRow.confidence > 90 ? "RIESGO_BAJO" : "RIESGO_MODERADO"}
-                                </div>
+
+                        <div>
+                            <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">DESCRIPCIÓN DEL PROYECTO</label>
+                            <div className="text-[#888888] leading-relaxed italic bg-[#0A0A0A] p-3 border border-[#111111]">
+                                {selectedRow.description || selectedRow.context?.slice(0, 400) + "..." || "No disponible."}
                             </div>
                         </div>
                     </div>
-                </section>
 
-                {/* SECCION III: DESCRIPTIVE DETAILS */}
-                <section className="space-y-6">
-                    <div className="text-[11px] text-[#FFB000] font-black tracking-widest border-b border-[#222222] pb-2">== CONTEXTO_DETALLADO ==</div>
-                    <div className="space-y-6 text-[11px]">
+                    <div className="grid grid-cols-2 gap-4 border-t border-[#111111] pt-4">
                         <div>
-                            <label className="text-[#444444] font-black uppercase block mb-2">Promovente Responsable</label>
-                            <div className="text-[#AAAAAA] bg-[#0A0A0A] p-4 border-l-2 border-[#FFB000] uppercase font-bold">{selectedRow.promovente}</div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <div>
-                                <label className="text-[#444444] font-black block mb-1">Ubicación Administrativa</label>
-                                <div className="text-[#FFFFFF] uppercase">{selectedRow.estado}</div>
-                                <div className="text-[#666666] text-[10px] uppercase">{selectedRow.municipio}</div>
-                            </div>
-                            <div>
-                                <label className="text-[#444444] font-black block mb-1">Sector Industrial</label>
-                                <div className="text-[#FFFFFF] uppercase">{selectedRow.sector}</div>
-                            </div>
+                            <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">GROUNDED</label>
+                            <div className="text-[#27AE60] font-black">{selectedRow.grounded ? "TRUE" : "FALSE"}</div>
                         </div>
                         <div>
-                            <label className="text-[#444444] font-black block mb-1">Intel Insight (AI Summary)</label>
-                            <p className="text-[#888888] leading-relaxed italic">{selectedRow.insight || "No hay un resumen analítico disponible para este registro en este ciclo."}</p>
+                            <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-0.5">CONFIANZA_IA</label>
+                            <div className="text-[#FFB000] font-black">{selectedRow.confidence}%</div>
                         </div>
                     </div>
-                </section>
 
-                {/* SECCION IV: SOURCES & LINKS */}
-                <section className="space-y-6 pt-6 border-t border-[#111111]">
-                    <div className="text-[11px] text-[#FFB000] font-black tracking-widest uppercase">== ARCHIVOS_Y_FUENTES ==</div>
-                    <div className="grid grid-cols-2 gap-2">
-                        {[
-                            { label: 'GACETA_PDF', color: '#FFFFFF' },
-                            { label: 'EXPEDIENTE_DIG', color: '#AAAAAA' },
-                            { label: 'RESOLUCION_SCAN', color: '#AAAAAA' },
-                            { label: 'MAPA_GEOGRAFICO', color: '#27AE60' }
-                        ].map((link, i) => (
-                            <button key={i} className="flex items-center gap-3 p-3 bg-[#111111] hover:bg-[#FFB000] hover:text-black transition-all group border border-transparent hover:border-black">
-                                <span className="text-[9px] font-black" style={{ color: link.color }}>[{link.label}]</span>
-                                <span className="text-[8px] opacity-0 group-hover:opacity-100 font-bold ml-auto">OPEN_FILE ↗</span>
+                    <div className="border-t border-[#111111] pt-4">
+                        <label className="text-[#00E5FF] font-black uppercase tracking-widest block mb-1">ENLACES TÁCTICOS</label>
+                        <div className="grid grid-cols-1 gap-1">
+                          {['MIA', 'Visor Geográfico', 'GACETA', 'Expediente del Trámite'].map(link => (
+                            <button key={link} className="w-full text-left px-3 py-2 bg-[#111111] hover:bg-[#FFB000] hover:text-black transition-all text-[#00E5FF] text-[10px] font-black flex items-center gap-3">
+                              <span className="opacity-40">→</span> {link.toUpperCase()}
                             </button>
-                        ))}
+                          ))}
+                        </div>
                     </div>
-                </section>
-                
-                <div className="h-12 border-t border-[#111111] pt-4 text-center">
-                    <span className="text-[8px] text-[#333333] uppercase font-black tracking-[0.4em]">ZOHAR_INTEL_SYSTEM_RECORDS_SECURED</span>
+                </div>
+
+                <div className="pt-8 text-center">
+                    <span className="text-[9px] text-[#222222] uppercase font-black tracking-[0.3em] font-mono">ZOHAR_RECORD_ESTRAT_v2.2_SECURED</span>
                 </div>
             </div>
           )}

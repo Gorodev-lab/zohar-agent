@@ -1,6 +1,12 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 interface LogEntry {
   ts: string;
@@ -48,14 +54,17 @@ export default function LogTerminal() {
           <div className="text-[#222222] italic">Waiting for telemetry data...</div>
         )}
         {logs.map((log, i) => (
-          <div key={i} className="flex gap-4">
-            <span className="text-[#444444] shrink-0">[{log.ts?.split(' ')[1] || '00:00:00'}]</span>
-            <span className={`shrink-0 font-bold ${
-              log.lvl === 'INFO' ? 'text-blue-500' : 
-              log.lvl === 'DEBUG' ? 'text-amber-600' : 
-              log.lvl === 'ERROR' ? 'text-red-500' : 'text-[#666666]'
-            }`}>[{log.lvl}]</span>
-            <span className="text-[#AAAAAA] break-all">{log.msg}</span>
+          <div key={i} className="flex gap-2 text-[10px] leading-tight">
+            <span className="text-[#444444] shrink-0">{log.ts?.split(' ')[1] || '00:00:00'}</span>
+            <span className={cn("shrink-0 font-bold",
+              log.lvl === 'INFO' ? 'text-[#00D1FF]' : 
+              log.lvl === 'DEBUG' ? 'text-[#888888]' : 
+              log.lvl === 'ERROR' ? 'text-[#FF4444]' : 
+              log.lvl === 'WARNING' ? 'text-[#FFD700]' : 'text-[#666666]'
+            )}>
+              [{log.lvl}]
+            </span>
+            <span className="text-[#CCCCCC]">{log.msg}</span>
           </div>
         ))}
       </div>
