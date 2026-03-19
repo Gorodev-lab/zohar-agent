@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -23,8 +22,13 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
   
   useEffect(() => {
     const fetchStatus = async () => {
-      const { data } = await supabase.from('agente_status').select('*').eq('id', 1).single();
-      if (data) setStatus(data);
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (data.agent_state) setStatus(data.agent_state);
+      } catch (err) {
+        console.error("Status fetch error:", err);
+      }
     };
 
     fetchStatus();
@@ -37,12 +41,12 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
       {/* HEADER (Esoteria Nav Style) */}
       <header className="h-[64px] border-b border-[#222222] flex items-center justify-between px-8 bg-[#0A0A0A] shrink-0">
         <div className="flex items-center gap-12">
-          <div className="font-bold text-[14px] flex items-center">
+          <div className="font-bold text-[14px] font-mono flex items-center">
             <span className="text-[#FFB000] mr-2">&gt;</span>
-            <span className="tracking-tight uppercase">ZOHAR // STRATEGIC_INTELLIGENCE</span>
+            <span className="tracking-tight uppercase">ZOHAR // STRATEGIC_INTELLIGENCE_</span>
           </div>
           
-          <nav className="flex items-center gap-8">
+          <nav className="flex items-center gap-8 font-mono">
             {[
               { id: 'projects', label: 'Proyectos' },
               { id: 'regulatory', label: 'Ordenamiento' },
@@ -75,6 +79,18 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
         </div>
 
         <div className="flex items-center gap-6">
+          {status && status.action !== "ESPERA" && (
+            <div className="hidden md:flex flex-col items-end mr-4">
+              <span className="text-[10px] text-[#FFB000] font-mono leading-none flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-[#FFB000] animate-pulse rounded-full" />
+                EXEC: {status.action}
+              </span>
+              <span className="text-[10px] text-[#666666] font-mono truncate max-w-[150px]">
+                {status.pdf || status.target}
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 text-[12px] text-[#666666]">
             <span className={cn(
                 "w-2 h-2",

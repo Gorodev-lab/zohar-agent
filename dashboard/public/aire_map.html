@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZOHAR // MAPA CALIDAD DEL AIRE // EMISIONES MX</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+  <script>
+    (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+      v: "weekly",
+      key: "AIzaSyCTgF49SGXXwtEmt9QEkwPRC6GEG-71SQw",
+      internalUsageAttributionIds: "gmp_mcp_codeassist_v0.1_github"
+    });
+  </script>
+  <style>
+    :root {
+      --amber: #ffb000;
+      --amber-dim: #7c5600;
+      --amber-glow: rgba(255,176,0,0.12);
+      --amber-bright: #ffd060;
+      --bg: #000;
+      --panel: #050500;
+      --font: 'Fira Code', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--amber);
+      font-family: var(--font);
+      font-size: 12px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    body::after {
+      content: "";
+      position: fixed; inset: 0;
+      background:
+        linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.18) 50%),
+        linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.01), rgba(0,0,255,0.03));
+      background-size: 100% 2px, 3px 100%;
+      pointer-events: none; z-index: 9999;
+    }
+
+    /* ── HEADER ── */
+    header {
+      border-bottom: 2px solid var(--amber);
+      padding: 8px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-shrink: 0;
+      background: var(--panel);
+    }
+    .header-title { font-weight: 700; font-size: 16px; letter-spacing: 3px; }
+    .header-sub { font-size: 10px; color: var(--amber-dim); margin-top: 2px; }
+
+    .badges { display: flex; gap: 8px; align-items: center; }
+    .badge {
+      padding: 3px 10px;
+      border: 1px solid var(--amber);
+      font-size: 10px; font-weight: 700;
+      background: var(--amber-glow);
+      letter-spacing: 1px;
+      transition: background 0.3s;
+    }
+    .badge.loading { border-color: var(--amber-dim); color: var(--amber-dim); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── CONTROLS ── */
+    .controls {
+      display: flex; gap: 10px; align-items: center;
+      padding: 7px 16px;
+      border-bottom: 1px solid var(--amber-dim);
+      flex-wrap: wrap; flex-shrink: 0;
+      background: var(--panel);
+    }
+    .ctrl-group { display: flex; align-items: center; gap: 6px; }
+    .ctrl-label { color: var(--amber-dim); text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
+
+    select {
+      background: #0a0900; color: var(--amber);
+      border: 1px solid var(--amber-dim);
+      padding: 4px 8px 4px 6px;
+      font-family: var(--font); font-size: 11px;
+      cursor: pointer; outline: none;
+      transition: border-color 0.2s;
+    }
+    select:hover, select:focus { border-color: var(--amber); }
+
+    .btn {
+      padding: 4px 10px;
+      border: 1px solid var(--amber-dim);
+      background: transparent; color: var(--amber-dim);
+      font-family: var(--font); font-size: 10px;
+      cursor: pointer; letter-spacing: 1px;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--amber); color: var(--amber); background: var(--amber-glow); }
+    .btn.active { border-color: var(--amber); color: var(--bg); background: var(--amber); }
+
+    .stat-pill {
+      padding: 3px 8px;
+      border: 1px solid var(--amber-dim);
+      font-size: 9px; color: var(--amber-dim);
+      white-space: nowrap;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      overflow: hidden;
+    }
+
+    /* ── MAP ── */
+    #map-container { position: relative; overflow: hidden; background: #020200; }
+    #map { width: 100%; height: 100%; }
+
+    /* Loading overlay */
+    #map-loading {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.85);
+      z-index: 500; gap: 12px;
+      transition: opacity 0.4s;
+    }
+    #map-loading.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 2px solid var(--amber-dim);
+      border-top-color: var(--amber);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .load-text { font-size: 11px; color: var(--amber-dim); letter-spacing: 2px; }
+
+    /* Tooltip */
+    .tooltip {
+      position: absolute;
+      background: #0a0900;
+      border: 1px solid var(--amber);
+      padding: 10px 14px;
+      pointer-events: none; opacity: 0;
+      transition: opacity 0.12s;
+      z-index: 100; max-width: 240px; font-size: 11px;
+      box-shadow: 0 0 20px rgba(255,176,0,0.2);
+    }
+    .tooltip.visible { opacity: 1; }
+    .tooltip-title { font-weight: 700; margin-bottom: 6px; font-size: 12px; }
+    .tooltip-row {
+      display: flex; justify-content: space-between;
+      gap: 16px; margin-bottom: 2px;
+    }
+    .tooltip-row .lbl { color: var(--amber-dim); }
+    .tooltip-row .val { color: var(--amber-bright); }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      border-left: 1px solid var(--amber);
+      display: flex; flex-direction: column;
+      overflow: hidden; background: var(--panel);
+    }
+    .sidebar-section {
+      border-bottom: 1px solid var(--amber-dim);
+      padding: 10px 12px;
+      flex-shrink: 0;
+    }
+    .sidebar-section.grow { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .section-title {
+      font-weight: 700; font-size: 9px;
+      color: var(--amber-dim); text-transform: uppercase;
+      letter-spacing: 2px; margin-bottom: 8px;
+    }
+
+    /* Legend */
+    .legend-canvas-wrap { position: relative; margin: 4px 0 3px; }
+    #legend-canvas { display: block; width: 100%; height: 12px; }
+    .legend-labels {
+      display: flex; justify-content: space-between;
+      font-size: 9px; color: var(--amber-dim); margin-top: 2px;
+    }
+
+    /* Source bars */
+    .bar-row { display: flex; align-items: center; margin-bottom: 5px; gap: 6px; }
+    .bar-label { width: 60px; font-size: 9px; color: var(--amber-dim); flex-shrink: 0; text-align: right; }
+    .bar-track { flex: 1; height: 8px; background: #111000; position: relative; overflow: hidden; }
+    .bar-fill { height: 100%; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+    .bar-val { font-size: 9px; color: var(--amber-dim); width: 55px; text-align: right; flex-shrink: 0; }
+
+    /* Top list */
+    .scroll-area { overflow-y: auto; flex: 1; }
+    .rank-item {
+      display: flex; align-items: center; gap: 5px;
+      padding: 3px 0; cursor: pointer;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .rank-item:hover { border-bottom-color: var(--amber-dim); }
+    .rank-num { color: var(--amber-dim); font-size: 9px; width: 14px; flex-shrink: 0; }
+    .rank-name { font-size: 10px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-bar { width: 50px; height: 5px; background: #111000; flex-shrink: 0; }
+    .rank-bar-fill { height: 100%; background: var(--amber); transition: width 0.5s; }
+    .rank-val { font-size: 9px; color: var(--amber-dim); width: 55px; text-align: right; flex-shrink: 0; }
+    .rank-item:hover .rank-name { color: var(--amber-bright); }
+
+    /* State panel (click on state) */
+    #detail-panel { display: none; flex-direction: column; }
+    #detail-panel.visible { display: flex; }
+    .detail-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    .detail-title { font-size: 13px; font-weight: 700; }
+    .detail-sub { font-size: 9px; color: var(--amber-dim); }
+    .close-btn {
+      background: none; border: 1px solid var(--amber-dim);
+      color: var(--amber-dim); font-family: var(--font); font-size: 9px;
+      cursor: pointer; padding: 2px 6px;
+    }
+    .close-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+    footer {
+      border-top: 1px solid var(--amber-dim);
+      padding: 4px 16px;
+      display: flex; justify-content: space-between;
+      font-size: 9px; color: var(--amber-dim);
+      flex-shrink: 0; background: var(--panel);
+      letter-spacing: 1px;
+    }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--amber-dim); }
+
+    .gmap-circle-marker {
+      transform: translate(0, 50%);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="header-title">ZOHAR // MAPA_CALIDAD_DEL_AIRE</div>
+    <div class="header-sub">Inventario Nacional de Emisiones — México &nbsp;|&nbsp; INECC/SEMARNAT</div>
+  </div>
+  <div class="badges">
+    <span id="muni-badge" class="badge loading">CARGANDO...</span>
+    <span id="total-badge" class="badge" style="border-color:var(--amber-dim);color:var(--amber-dim)">— t/año</span>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="ctrl-group">
+    <span class="ctrl-label">Contaminante:</span>
+    <select id="pollutant-sel">
+      <option value="PM_2_5">PM₂.₅ — Partículas finas</option>
+      <option value="PM_010">PM₁₀ — Partículas gruesas</option>
+      <option value="NOx">NOₓ — Óxidos de nitrógeno</option>
+      <option value="CO">CO — Monóxido de carbono</option>
+      <option value="SO_2">SO₂ — Dióxido de azufre</option>
+      <option value="COV">COV — Compuestos org. volátiles</option>
+      <option value="NH_3">NH₃ — Amoníaco</option>
+    </select>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Fuente:</span>
+    <select id="source-sel">
+      <option value="TODAS">Todas las fuentes</option>
+      <option value="Fuentes fijas">Fijas</option>
+      <option value="Fuentes de área">Área</option>
+      <option value="Fuentes móviles carreteros">Móviles carreteros</option>
+      <option value="Fuentes móviles que no circulan por carretera">Móviles no carreteros</option>
+      <option value="Fuentes naturales">Naturales</option>
+    </select>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">Vista:</span>
+    <button class="btn active" id="btn-choropleth" onclick="setView('choropleth')">COROPLETA</button>
+    <button class="btn" id="btn-bubbles" onclick="setView('bubbles')">BURBUJAS</button>
+  </div>
+  <div class="ctrl-group" style="margin-left:auto">
+    <span class="stat-pill" id="stat-total">—</span>
+  </div>
+</div>
+
+<div class="main">
+  <div id="map-container">
+    <div id="map"></div>
+    <!-- Loading overlay -->
+    <div id="map-loading">
+      <div class="spinner"></div>
+      <div class="load-text">CARGANDO DATOS DE EMISIONES...</div>
+    </div>
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip">
+      <div class="tooltip-title" id="tt-title"></div>
+      <div id="tt-body"></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <!-- LEYENDA -->
+    <div class="sidebar-section">
+      <div class="section-title">// Escala de Emisiones (t/año)</div>
+      <div class="legend-canvas-wrap">
+        <canvas id="legend-canvas" height="12"></canvas>
+      </div>
+      <div class="legend-labels">
+        <span id="leg-min">0</span>
+        <span id="leg-mid"></span>
+        <span id="leg-max"></span>
+      </div>
+    </div>
+
+    <!-- DESGLOSE POR FUENTE -->
+    <div class="sidebar-section">
+      <div class="section-title">// Por Fuente — <span id="src-pollutant">PM₂.₅</span></div>
+      <div id="source-bars"></div>
+    </div>
+
+    <!-- TOP MUNICIPIOS -->
+    <div class="sidebar-section grow" id="top-section">
+      <div class="section-title">// Top 10 — <span id="top-pollutant">PM₂.₅</span></div>
+      <div class="scroll-area" id="top-list"></div>
+    </div>
+
+    <!-- DETALLE SELECCIONADO -->
+    <div class="sidebar-section" id="detail-panel">
+      <div class="detail-header">
+        <div>
+          <div class="detail-title" id="detail-title"></div>
+          <div class="detail-sub" id="detail-sub"></div>
+        </div>
+        <button class="close-btn" onclick="closeDetail()">✕</button>
+      </div>
+      <div id="detail-bars"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>FUENTE: INECC — Inventario Nacional de Emisiones &nbsp;|&nbsp; d3_aire01_49_1.csv</span>
+  <span id="footer-time"></span>
+  <span>ZOHAR_INTEL // CALIDAD_DEL_AIRE</span>
+</footer>
+
+<script>
+// ─── Paleta amber→rojo-intenso ──────────────────────────────────────────────
+const PALETTE = [
+  '#0a0900','#1f1400','#3d2500','#5c3700','#7b4a00',
+  '#9a5d00','#bd7200','#d98b00','#f0a500','#ffb000',
+];
+const PALETTE_HOT = [
+  '#0a0900','#1a0800','#350f00','#601800','#8c2300',
+  '#b53000','#d44500','#f06000','#ff8800','#ffb000',
+];
+
+function getColor(val, min, max, palette=PALETTE) {
+  if (max === min || val <= min) return palette[0];
+  const t = Math.pow((val - min) / (max - min), 0.35);
+  const idx = Math.min(palette.length - 1, Math.floor(t * palette.length));
+  return palette[idx];
+}
+
+// ─── Coordenadas centroide por estado ────────────────────────────────────────
+const STATE_COORDS = {
+  'Aguascalientes':      [21.88,-102.30], 'Baja California':    [30.80,-115.50],
+  'Baja California Sur': [25.00,-111.00], 'Campeche':           [18.83,-90.53],
+  'Coahuila':            [27.50,-102.00], 'Colima':             [19.24,-103.72],
+  'Chiapas':             [16.75,-93.11],  'Chihuahua':          [28.63,-106.08],
+  'Ciudad de México':    [19.43,-99.13],  'Durango':            [24.02,-104.65],
+  'Guanajuato':          [21.02,-101.26], 'Guerrero':           [17.55,-99.50],
+  'Hidalgo':             [20.09,-98.76],  'Jalisco':            [20.66,-103.35],
+  'México':              [19.29,-99.65],  'Michoacán':          [19.56,-101.70],
+  'Morelos':             [18.67,-99.10],  'Nayarit':            [21.75,-104.86],
+  'Nuevo León':          [25.59,-99.99],  'Oaxaca':             [17.06,-96.72],
+  'Puebla':              [19.04,-98.20],  'Querétaro':          [20.59,-100.39],
+  'Quintana Roo':        [19.18,-88.47],  'San Luis Potosí':    [22.15,-100.98],
+  'Sinaloa':             [24.82,-107.39], 'Sonora':             [29.07,-110.96],
+  'Tabasco':             [17.99,-92.92],  'Tamaulipas':         [24.27,-98.84],
+  'Tlaxcala':            [19.32,-98.24],  'Veracruz':           [19.17,-96.13],
+  'Yucatán':             [20.71,-89.07],  'Zacatecas':          [22.77,-102.58],
+};
+
+let exactCoords = {}; // Carga dinámica opcional
+
+function getMuniCoords(estado, muni) {
+  const key = `${estado}||${muni}`;
+  if (exactCoords[key]) {
+      return exactCoords[key];
+  }
+
+  const base = STATE_COORDS[estado] || [23.6, -102.5];
+  let hash = 0;
+  for (const c of muni) hash = ((hash * 31 + c.charCodeAt(0)) | 0) >>> 0;
+  // offset determinístico dentro del estado (±1.2°lat, ±1.8°lon)
+  const dlat = ((hash & 0xFFF) / 0xFFF - 0.5) * 2.4;
+  const dlon = (((hash >> 12) & 0xFFF) / 0xFFF - 0.5) * 3.6;
+  return [base[0] + dlat, base[1] + dlon];
+}
+
+// ─── Constantes ───────────────────────────────────────────────────────────────
+const POLLUTANT_LABELS = {
+  PM_2_5:'PM₂.₅', PM_010:'PM₁₀', NOx:'NOₓ', CO:'CO',
+  SO_2:'SO₂', COV:'COV', NH_3:'NH₃'
+};
+const SOURCE_COLORS = {
+  'Fuentes fijas':              '#ff6b00',
+  'Fuentes de área':            '#ffb000',
+  'Fuentes móviles carreteros': '#00d4ff',
+  'Fuentes móviles que no circulan por carretera': '#e040fb',
+  'Fuentes naturales':          '#69f0ae',
+};
+
+// ─── Estado global ────────────────────────────────────────────────────────────
+let allData = [];
+let muniData = {};   // key=estado||muni → objeto agregado
+let map, AdvancedMarkerElement;
+let currentMarkers = [];
+let currentPollutant = 'PM_2_5';
+let currentSource    = 'TODAS';
+let currentView      = 'choropleth';
+
+// ─── Mapa ─────────────────────────────────────────────────────────────────────
+async function initMap() {
+  const { Map } = await google.maps.importLibrary("maps");
+  const markerLib = await google.maps.importLibrary("marker");
+  AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+
+  map = new Map(document.getElementById("map"), {
+    center: { lat: 23.6, lng: -102.5 },
+    zoom: 5,
+    minZoom: 4,
+    maxZoom: 12,
+    mapId: "DEMO_MAP_ID",
+    disableDefaultUI: true,
+    zoomControl: true,
+    backgroundColor: '#020200',
+    styles: [
+      { elementType: "geometry", stylers: [{ color: "#0a0a09" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#000000" }] },
+      { elementType: "labels.text.fill", stylers: [{ color: "#665e4e" }] },
+      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d98b00" }] },
+      { featureType: "road", elementType: "geometry", stylers: [{ color: "#1f180f" }] },
+      { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0a0900" }] },
+      { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#3d2500" }] },
+      { featureType: "water", elementType: "geometry", stylers: [{ color: "#020200" }] },
+      { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+      { featureType: "poi", stylers: [{ visibility: "off" }] }
+    ]
+  });
+  
+  loadData();
+}
+
+// ─── Carga de datos (JSON desde API) ─────────────────────────────────────────
+async function loadData() {
+  try {
+    try {
+      // Intentar cargar coordenadas exactas
+      const coordRes = await fetch('/api/muni_coords.json').catch(() => ({ok:false}));
+      if (coordRes.ok) exactCoords = await coordRes.json();
+      else {
+        const coordResStatic = await fetch('./muni_coords.json').catch(() => ({ok:false}));
+        if (coordResStatic.ok) exactCoords = await coordResStatic.json();
+      }
+    } catch (e) {}
+
+    // Intentar API principal (Refactorizada a Next.js)
+    let res = await fetch('/api/data/air_quality').catch(() => ({ok:false, status: 'FetchError'}));
+    
+    // Fallback a snapshot estático si el API falla (común en Vercel Serverless)
+    if (!res.ok) {
+      console.warn(`API Principal falló (${res.status}), intentando fallback estático...`);
+      res = await fetch('./aire_snapshot.json').catch(() => ({ok:false, status: 'SnapshotError'}));
+    }
+
+    if (!res.ok) throw new Error(`HTTP ${res.status || 'Offline'}`);
+    
+    const raw = await res.json();
+    if (!raw || raw.length === 0) throw new Error('Sin datos');
+    processData(raw);
+  } catch(err) {
+    console.error('Error cargando datos:', err);
+    showLoadError(err.message);
+  }
+}
+
+function showLoadError(msg) {
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const serverMsg = isLocal ? 'en <span style="color:var(--amber)">localhost:8081</span>' : 'en el servidor de producción';
+  
+  document.getElementById('map-loading').innerHTML = `
+    <div style="font-size:32px;opacity:0.4">📡</div>
+    <div style="color:var(--amber-dim);font-size:11px;text-align:center;max-width:280px">
+      ERROR: ${msg}<br><br>
+      Verifica que el motor de datos ZOHAR esté disponible<br>
+      ${serverMsg}
+    </div>`;
+}
+
+// ─── Procesar datos JSON ───────────────────────────────────────────────────────
+function processData(raw) {
+  // El API devuelve JSON con nombres de columna sin modificar (c.strip())
+  allData = raw.map(r => {
+    const estado = (r['Entidad_federativa'] || r['Entidad'] || '').trim();
+    const muni   = (r['Municipio'] || '').trim();
+    
+    // Si la API provee lat y lon exactos (estrategia B), usarlos.
+    const lat = (r['lat'] !== undefined && r['lat'] !== null && r['lat'] !== "") ? +r['lat'] : null;
+    const lon = (r['lon'] !== undefined && r['lon'] !== null && r['lon'] !== "") ? +r['lon'] : null;
+    const coords = (lat !== null && lon !== null) ? [lat, lon] : getMuniCoords(estado, muni);
+
+    return {
+      estado, muni,
+      fuente: (r['Tipo_de_Fuente'] || '').trim(),
+      lat: coords[0], lon: coords[1],
+      SO_2:   +r['SO_2']   || 0,
+      CO:     +r['CO']     || 0,
+      NOx:    +r['NOx']    || 0,
+      COV:    +r['COV']    || 0,
+      PM_010: +r['PM_010'] || 0,
+      PM_2_5: +r['PM_2_5'] || 0,
+      NH_3:   +r['NH_3']   || 0,
+    };
+  }).filter(r => r.estado && r.muni);
+
+  const nMunis = new Set(allData.map(d => `${d.estado}||${d.muni}`)).size;
+
+  // Badge
+  const badge = document.getElementById('muni-badge');
+  badge.textContent = `${nMunis.toLocaleString()} MUNICIPIOS`;
+  badge.classList.remove('loading');
+
+  // Ocultar loading overlay
+  document.getElementById('map-loading').classList.add('hidden');
+
+  renderAll();
+  updateClock();
+  setInterval(updateClock, 1000);
+}
+
+// ─── Agregar por municipio ────────────────────────────────────────────────────
+function aggregate(sourceFilter) {
+  const map_ = {};
+  for (const d of allData) {
+    if (sourceFilter !== 'TODAS' && d.fuente !== sourceFilter) continue;
+    const key = `${d.estado}||${d.muni}`;
+    if (!map_[key]) {
+      map_[key] = {
+        estado: d.estado, muni: d.muni,
+        lat: d.lat, lon: d.lon,
+        SO_2:0, CO:0, NOx:0, COV:0, PM_010:0, PM_2_5:0, NH_3:0,
+        fuentes: {}
+      };
+    }
+    const e = map_[key];
+    for (const p of ['SO_2','CO','NOx','COV','PM_010','PM_2_5','NH_3']) e[p] += d[p];
+    e.fuentes[d.fuente] = (e.fuentes[d.fuente]||0) + d[currentPollutant];
+  }
+  return Object.values(map_);
+}
+
+// ─── Render principal ─────────────────────────────────────────────────────────
+function renderAll() {
+  currentPollutant = document.getElementById('pollutant-sel').value;
+  currentSource    = document.getElementById('source-sel').value;
+
+  const lbl = POLLUTANT_LABELS[currentPollutant] || currentPollutant;
+  document.getElementById('top-pollutant').textContent = lbl;
+  document.getElementById('src-pollutant').textContent = lbl;
+
+  const munis = aggregate(currentSource);
+  if (!munis.length) return;
+
+  const vals = munis.map(m => m[currentPollutant]);
+  const minV = Math.min(...vals);
+  const maxV = Math.max(...vals);
+  const totalNac = vals.reduce((a,b)=>a+b,0);
+
+  document.getElementById('stat-total').textContent =
+    `Σ NAC: ${fmt(totalNac)} t/año`;
+  document.getElementById('total-badge').textContent =
+    `${fmt(totalNac)} t/año`;
+
+  updateLegend(minV, maxV);
+  updateSourceBars();
+  updateTopList(munis, maxV);
+  renderMap(munis, minV, maxV);
+}
+
+// ─── Mapa ─────────────────────────────────────────────────────────────────────
+function renderMap(munis, minV, maxV) {
+  // Eliminar marcadores previos
+  currentMarkers.forEach(mk => mk.map = null);
+  currentMarkers = [];
+
+  munis.sort((a,b) => a[currentPollutant] - b[currentPollutant]); // bajos primero → altos encima
+
+  const maxR = 28, minR = 3;
+  const isBubble = currentView === 'bubbles';
+
+  for (const m of munis) {
+    const val = m[currentPollutant];
+    const color = getColor(val, minV, maxV, val > maxV*0.7 ? PALETTE_HOT : PALETTE);
+    const t = maxV > minV ? (val - minV) / (maxV - minV) : 0;
+
+    let radius;
+    let isHot = val > maxV*0.5;
+    if (isBubble) radius = Math.max(minR, minR + t * (maxR - minR));
+    else radius = 6 + t * 4;
+
+    const div = document.createElement('div');
+    div.className = 'gmap-circle-marker';
+    div.style.width = (radius * 2) + 'px';
+    div.style.height = (radius * 2) + 'px';
+    div.style.backgroundColor = color;
+    div.style.borderRadius = '50%';
+    div.style.opacity = isBubble ? '0.78' : '0.95';
+    if (isBubble && isHot) div.style.border = '1px solid #ffb000';
+
+    // Tooltip interacciones nativas JS
+    div.addEventListener('mouseover', e => showTooltip(e, m, minV, maxV));
+    div.addEventListener('mouseout',  hideTooltip);
+    div.addEventListener('click',     () => showDetail(m));
+
+    const marker = new AdvancedMarkerElement({
+      position: { lat: m.lat, lng: m.lon },
+      map: map,
+      content: div,
+      title: m.muni
+    });
+
+    currentMarkers.push(marker);
+  }
+}
+
+// ─── Vista toggle ─────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('btn-choropleth').classList.toggle('active', v === 'choropleth');
+  document.getElementById('btn-bubbles').classList.toggle('active', v === 'bubbles');
+  renderAll();
+}
+
+// ─── Tooltip ─────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+function showTooltip(e, m, minV, maxV) {
+  const pct = maxV > minV
+    ? ((m[currentPollutant]-minV)/(maxV-minV)*100).toFixed(0) : 0;
+  const topFuente = Object.entries(m.fuentes).sort((a,b)=>b[1]-a[1])[0];
+
+  document.getElementById('tt-title').textContent = `${m.muni}, ${m.estado}`;
+  let html = `
+    <div class="tooltip-row"><span class="lbl">${POLLUTANT_LABELS[currentPollutant]}</span>
+      <span class="val">${fmt(m[currentPollutant])} t/año</span></div>
+    <div class="tooltip-row"><span class="lbl">% del máx</span>
+      <span class="val">${pct}%</span></div>`;
+  if (topFuente) {
+    const col = SOURCE_COLORS[topFuente[0]] || 'var(--amber)';
+    html += `<div class="tooltip-row"><span class="lbl">Fuente ppal</span>
+      <span style="color:${col};font-size:10px">${topFuente[0].replace('Fuentes ','')}</span></div>`;
+  }
+  tooltip.querySelector('#tt-body').innerHTML = html;
+
+  const rect = document.getElementById('map-container').getBoundingClientRect();
+  const evt = e.originalEvent || e; // Support original leaflet e.originalEvent or native event e
+  let tx = evt.clientX - rect.left + 14;
+  let ty = evt.clientY - rect.top  + 14;
+  if (tx + 250 > rect.width)  tx = evt.clientX - rect.left - 255;
+  if (ty + 110 > rect.height) ty = evt.clientY - rect.top  - 115;
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top  = ty + 'px';
+  tooltip.classList.add('visible');
+}
+function hideTooltip() { tooltip.classList.remove('visible'); }
+
+// ─── Detalle expandido (click) ────────────────────────────────────────────────
+function showDetail(m) {
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('visible');
+  document.getElementById('detail-title').textContent = m.muni;
+  document.getElementById('detail-sub').textContent   = m.estado;
+
+  const pols = ['PM_2_5','PM_010','NOx','CO','SO_2','COV','NH_3'];
+  const maxPol = Math.max(...pols.map(p=>m[p]), 1);
+  let html = '';
+  for (const p of pols) {
+    const t = m[p]/maxPol*100;
+    const hot = m[p] > maxPol*0.6;
+    html += `<div class="bar-row">
+      <div class="bar-label">${POLLUTANT_LABELS[p]}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${t}%;background:${hot?'#ff6b00':'var(--amber)'}"></div>
+      </div>
+      <div class="bar-val">${fmt(m[p])}</div>
+    </div>`;
+  }
+  document.getElementById('detail-bars').innerHTML = html;
+  map.panTo({ lat: m.lat, lng: m.lon });
+  map.setZoom(9);
+}
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('visible');
+}
+
+// ─── Leyenda ─────────────────────────────────────────────────────────────────
+function updateLegend(minV, maxV) {
+  const canvas = document.getElementById('legend-canvas');
+  const w = canvas.offsetWidth || 276;
+  canvas.width = w;
+  const ctx   = canvas.getContext('2d');
+  const grad  = ctx.createLinearGradient(0, 0, w, 0);
+  PALETTE.forEach((c, i) => grad.addColorStop(i/(PALETTE.length-1), c));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, 12);
+  document.getElementById('leg-min').textContent = fmt(minV);
+  document.getElementById('leg-mid').textContent = fmt((minV+maxV)/2);
+  document.getElementById('leg-max').textContent = fmt(maxV);
+}
+
+// ─── Barras por fuente ────────────────────────────────────────────────────────
+function updateSourceBars() {
+  const bySource = {};
+  for (const d of allData) {
+    if (currentSource !== 'TODAS' && d.fuente !== currentSource) continue;
+    bySource[d.fuente] = (bySource[d.fuente]||0) + d[currentPollutant];
+  }
+  const entries = Object.entries(bySource).sort((a,b)=>b[1]-a[1]);
+  const maxS    = Math.max(...entries.map(e=>e[1]), 1);
+
+  const SHORT = {
+    'Fuentes fijas':'Fijas',
+    'Fuentes de área':'Área',
+    'Fuentes móviles carreteros':'Carreteros',
+    'Fuentes móviles que no circulan por carretera':'No carreteros',
+    'Fuentes naturales':'Naturales',
+  };
+
+  let html = '';
+  for (const [src, val] of entries) {
+    const pct   = val/maxS*100;
+    const color = SOURCE_COLORS[src] || 'var(--amber)';
+    html += `<div class="bar-row">
+      <div class="bar-label">${SHORT[src]||src.slice(0,10)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <div class="bar-val">${fmt(val)}</div>
+    </div>`;
+  }
+  document.getElementById('source-bars').innerHTML = html;
+}
+
+// ─── Top 10 municipios ────────────────────────────────────────────────────────
+function updateTopList(munis, maxV) {
+  const top10 = [...munis]
+    .sort((a,b) => b[currentPollutant] - a[currentPollutant])
+    .slice(0, 10);
+  const topMax = top10[0]?.[currentPollutant] || 1;
+
+  let html = '';
+  top10.forEach((m, i) => {
+    const pct  = m[currentPollutant]/topMax*100;
+    const rank = i+1;
+    const rankCol = rank <= 3 ? '#ff6b00' : 'var(--amber-dim)';
+    html += `<div class="rank-item" onclick="showDetail(muniRef('${m.estado}','${m.muni}'))">
+      <div class="rank-num" style="color:${rankCol}">${rank}</div>
+      <div class="rank-name">${m.muni}<br>
+        <span style="color:var(--amber-dim);font-size:9px">${m.estado}</span>
+      </div>
+      <div class="rank-bar"><div class="rank-bar-fill" style="width:${pct}%"></div></div>
+      <div class="rank-val">${fmt(m[currentPollutant])}</div>
+    </div>`;
+  });
+  document.getElementById('top-list').innerHTML = html;
+
+  // Guardar referencia para click desde top-list
+  window._muniRefs = {};
+  top10.forEach(m => { window._muniRefs[`${m.estado}||${m.muni}`] = m; });
+}
+
+function muniRef(estado, muni) {
+  return window._muniRefs?.[`${estado}||${muni}`];
+}
+
+// ─── Utilidades ───────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (!isFinite(n)) return '0';
+  if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+  return n.toFixed(1);
+}
+function updateClock() {
+  document.getElementById('footer-time').textContent =
+    new Date().toLocaleTimeString('es-MX', { hour12:false });
+}
+
+// ─── Event listeners ──────────────────────────────────────────────────────────
+document.getElementById('pollutant-sel').addEventListener('change', renderAll);
+document.getElementById('source-sel').addEventListener('change', renderAll);
+
+// ─── Boot ────────────────────────────────────────────────────────────────────
+// La inicialización ahora espera a google maps
+initMap();
+</script>
+</body>
+</html>

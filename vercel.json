@@ -1,15 +1,7 @@
 {
   "version": 2,
   "name": "zohar-agent",
-  "functions": {
-    "api/*.py": {
-      "memory": 1024,
-      "maxDuration": 15
-    }
-  },
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.py" }
-  ],
+  "framework": "nextjs",
   "env": {
     "VERCEL": "1",
     "SUPABASE_URL": "https://gmrnujwviunegvyuslrs.supabase.co"

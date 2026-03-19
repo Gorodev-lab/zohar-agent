@@ -43,7 +43,7 @@ STATE_FILE = HOME / "zohar_agent_state.json"
 QUEUE_FILE = BASE_DIR / "agent" / "zohar_queue.json"
 LOG_FILE = BASE_DIR / "agent" / "zohar_agent.jsonl"
 HISTORIC_FILE = BASE_DIR / "agent" / "semarnat_historic_consultations.json"
-DASHBOARD_DIR = BASE_DIR / "dashboard"
+DASHBOARD_DIR = BASE_DIR / "dashboard_legacy"
 
 # TONL-C5: Cache módulo-level para el JSON histórico completo
 # Evita leer y parsear el archivo (672KB, 848 registros) en cada request HTTP
