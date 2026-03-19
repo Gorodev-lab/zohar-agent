@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Esoteria Core Tokens */
+  --color-background: #0A0A0A;
+  --color-surface: #111111;
+  --color-border: #222222;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #AAAAAA;
+  --color-text-muted: #666666;
+  --color-text-disabled: #444444;
+  
+  /* Instance Accent (Zohar Amber) */
+  --color-accent: #FFB000;
+  --color-accent-hover: #D99600;
+  
+  /* Status Colors */
+  --color-status-active: #27AE60;
+  --color-status-pending: #F39C12;
+  --color-status-alert: #C0392B;
+  
+  /* Layout Constants */
+  --font-mono: 'IBM Plex Mono', 'Inter', system-ui, -apple-system, monospace;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px; /* Label size */
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* NO ANIMATIONS, NO GRADIENTS, NO ROUNDED CORNERS - Per STYLE_GUIDE.md */
+
+@layer base {
+  * {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+@layer utilities {
+  .terminal-border {
+    border: 1px solid var(--color-border);
+  }
+  .accent-text {
+    color: var(--color-accent);
+  }
+  .muted-text {
+    color: var(--color-text-muted);
+  }
+}
+
+/* Table overrides to match Esoteria platform */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+th {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+td {
+  padding: 12px 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+tr:hover td {
+  background-color: var(--color-surface);
+}
+
+tr.selected td {
+  background-color: var(--color-surface) !important;
+  color: var(--color-accent) !important;
+  border-left: 2px solid var(--color-accent);
+}
+
+/* Scrollbar */
+.scrollbar-tactical::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-tactical::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+.scrollbar-tactical::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+.scrollbar-tactical::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}

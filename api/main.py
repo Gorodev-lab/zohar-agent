@@ -26,7 +26,12 @@ supabase_client: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+from routes import air_quality
+
 app = FastAPI(title="Zohar Intelligence API")
+
+# Registro de Routers
+app.include_router(air_quality.router)
 
 # Configuración de Rutas
 HOME = Path(os.path.expanduser("~"))
@@ -125,6 +130,11 @@ app.add_middleware(
 )
 
 # Servir Frontend
+@app.get("/aire", response_class=HTMLResponse)
+async def get_air_map():
+    with open(DASHBOARD_DIR / "air_map.html", "r", encoding="utf-8") as f:
+        return f.read()
+
 @app.get("/", response_class=HTMLResponse)
 @app.get("/dashboard", response_class=HTMLResponse)
 async def get_index():
