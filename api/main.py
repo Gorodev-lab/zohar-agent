@@ -218,7 +218,8 @@ async def get_projects():
             # Normalizar nombres de columnas a mayúsculas para el Dashboard
             df.columns = [c.upper() for c in df.columns]
             df = df.rename(columns={"PID": "ID_PROYECTO", "YEAR": "ANIO"})
-            records = df.to_dict(orient="records")
+            json_str = df.to_json(orient="records")
+            records = json.loads(json_str)
             for r in records:
                 pid = r.get("ID_PROYECTO")
                 if pid:
