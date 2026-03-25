@@ -496,7 +496,6 @@ a.term-link:hover {
 
     <!-- ════════════ TABS (FILA 2) ════════════ -->
     <div class="term-tabs">
-        <div class="term-tab" :class="activeTab==='historic'?'active':''" @click="setTab('historic')" x-text="t('tab_hist')"></div>
         <div class="term-tab" :class="activeTab==='projects'?'active':''" @click="setTab('projects')" x-text="t('tab_proj')"></div>
         <div class="term-tab" :class="activeTab==='regulatory'?'active':''" @click="setTab('regulatory')" x-text="t('tab_reg')"></div>
         <div class="term-tab" :class="activeTab==='air_quality'?'active':''" @click="setTab('air_quality')" x-text="t('tab_air')"></div>
@@ -591,11 +590,83 @@ a.term-link:hover {
                 </template>
             </div>
 
-            <!-- Empty State -->
-            <div class="empty-state" x-show="!selectedRow" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--amber-dim);font-size:11px;">
-                <div style="font-size:16px;color:var(--amber-dim)">┌──────────────┐</div>
-                <div style="color:var(--amber-dim)">│ <span x-text="t('no_sel')"></span> │</div>
-                <div style="font-size:16px;color:var(--amber-dim)">└──────────────┘</div>
+            <!-- Empty State / CONTROL PANEL -->
+            <div class="empty-state" x-show="!selectedRow" style="flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;padding:8px 6px;gap:0;">
+
+                <!-- ─── CONTROL DE EXTRACCIÓN ─── -->
+                <div style="width:100%;border:1px solid var(--amber-dim);margin-bottom:6px;">
+                    <div style="background:var(--amber);color:var(--bg);font-weight:700;font-size:10px;padding:1px 4px;">══ CONTROL_EXTRACCIÓN ══</div>
+                    <div style="padding:4px 6px;">
+
+                        <!-- Indicador de estado -->
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+                            <span style="font-size:10px;color:var(--turquoise);">ESTADO:</span>
+                            <span x-show="agentRunStatus==='IDLE'"    style="color:var(--green);  font-weight:700;font-size:11px;">🟢 IDLE — ESPERANDO CMD</span>
+                            <span x-show="agentRunStatus==='RUNNING'" style="color:var(--amber);  font-weight:700;font-size:11px;animation:blink-cursor 1s step-end infinite;">🟡 RUNNING…</span>
+                            <span x-show="agentRunStatus==='COMPLETE'"style="color:var(--green);  font-weight:700;font-size:11px;">✅ COMPLETO</span>
+                            <span x-show="agentRunStatus==='ERROR'"   style="color:var(--red);    font-weight:700;font-size:11px;">🔴 ERROR</span>
+                        </div>
+
+                        <!-- Botón prominente -->
+                        <button id="btn-extract"
+                            @click="startExtraction()"
+                            :disabled="agentRunStatus==='RUNNING'"
+                            style="
+                                width:100%;
+                                background: agentRunStatus==='RUNNING' ? 'var(--amber-dim)' : 'var(--amber)';
+                                color: var(--bg);
+                                font-family: var(--font);
+                                font-size: 12px;
+                                font-weight: 700;
+                                border: none;
+                                padding: 4px 0;
+                                cursor: pointer;
+                                letter-spacing: 1px;
+                                text-transform: uppercase;
+                            "
+                            :style="agentRunStatus==='RUNNING' ? 'background:var(--amber-dim);cursor:not-allowed;' : 'background:var(--amber);cursor:pointer;'"
+                        >
+                            ▶ INICIAR EXTRACCIÓN (CICLO ÚNICO)
+                        </button>
+
+                        <!-- Última línea de log -->
+                        <div x-show="agentRunStatus!=='IDLE'" style="margin-top:4px;font-size:9px;color:var(--amber-dim);word-break:break-all;line-height:12px;" x-text="agentLastLine || '—'"></div>
+                    </div>
+                </div>
+
+                <!-- ─── RECURSOS DEL SISTEMA ─── -->
+                <div style="width:100%;border:1px solid var(--amber-dim);margin-bottom:6px;">
+                    <div style="background:var(--bg);color:var(--turquoise);font-weight:700;font-size:10px;padding:1px 4px;border-bottom:1px solid var(--amber-dim);">── RECURSOS_SISTEMA ──</div>
+                    <div style="padding:3px 6px;font-size:10px;line-height:16px;">
+                        <div><span style="color:var(--amber-dim);">CPU_TEMP :</span> <b x-text="resources.cpu_temp || '---'"></b></div>
+                        <div><span style="color:var(--amber-dim);">RAM_USED :</span> <b x-text="(resources.mem_used_pct || 0) + '%'"></b></div>
+                        <div><span style="color:var(--amber-dim);">DISCO    :</span> <b style="font-size:9px;" x-text="resources.disk || '---'"></b></div>
+                        <div><span style="color:var(--amber-dim);">MODELO   :</span> <b style="color:var(--green);font-size:9px;" x-text="resources.model_active || 'gemini-2.0-flash'"></b></div>
+                        <div><span style="color:var(--amber-dim);">SUPABASE :</span> <b x-text="resources.databases?.supabase?.status || '---'"></b></div>
+                    </div>
+                </div>
+
+                <!-- ─── COLA DEL AGENTE ─── -->
+                <div style="width:100%;border:1px solid var(--amber-dim);">
+                    <div style="background:var(--bg);color:var(--turquoise);font-weight:700;font-size:10px;padding:1px 4px;border-bottom:1px solid var(--amber-dim);">── COLA_AGENTE ──</div>
+                    <div style="padding:3px 6px;font-size:10px;line-height:16px;">
+                        <div><span style="color:var(--amber-dim);">TOTAL   :</span> <b x-text="resources.queue?.total || 0"></b></div>
+                        <div><span style="color:var(--green);">SUCCESS :</span> <b x-text="resources.queue?.success || 0"></b></div>
+                        <div><span style="color:var(--amber);">PENDING :</span> <b x-text="resources.queue?.pending || 0"></b></div>
+                        <div><span style="color:var(--red);"  >FAILED  :</span> <b x-text="resources.queue?.failed || 0"></b></div>
+                        <div style="margin-top:2px;">
+                            <div style="height:4px;background:#111;width:100%;">
+                                <div :style="'height:4px;background:var(--green);width:'+(resources.queue?.progress_pct||0)+'%'"></div>
+                            </div>
+                            <div style="text-align:right;color:var(--green);font-size:9px;" x-text="(resources.queue?.progress_pct||0)+'%'"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hint -->
+                <div style="margin-top:8px;color:var(--amber-dim);font-size:9px;text-align:center;width:100%;">
+                    [CLICK FILA → DETALLES]
+                </div>
             </div>
         </div>
     </div>
@@ -616,6 +687,9 @@ a.term-link:hover {
 function zoharTerminal() {
     return {
         status: {},
+        agentRunStatus: 'IDLE',   // IDLE | RUNNING | COMPLETE | ERROR
+        agentLastLine: '',
+        resources: {},
         activeTab: 'historic',
         data: [],
         columns: [],
@@ -694,9 +768,11 @@ function zoharTerminal() {
         initSystem() {
             this.updateTime();
             this.fetchSidebarData();
+            this.fetchResources();
             setInterval(() => this.updateTime(), 1000);
             setInterval(() => this.fetchSidebarData(), 5000);
-            this.setTab('historic');
+            setInterval(() => this.fetchResources(), 8000);
+            this.setTab('projects');
         },
 
         updateTime() {
@@ -735,6 +811,61 @@ function zoharTerminal() {
                 this.agentLogs.push({ ts: new Date().toISOString(), level: 'ERR', msg: `CTRL_FAIL: ${act} - ${e.message}` });
             }
         },
+
+        async startExtraction() {
+            if (this.agentRunStatus === 'RUNNING') return;
+            this.agentRunStatus = 'RUNNING';
+            this.agentLastLine = 'Iniciando ciclo único 2026…';
+            try {
+                const res = await fetch('/api/control/agent/start-once', {
+                    method: 'POST',
+                    headers: { 'bypass-tunnel-reminder': 'true' }
+                }).then(r => r.json());
+                this.agentLogs.push({ ts: new Date().toISOString(), level: 'INFO', msg: res.msg || 'Ciclo único iniciado' });
+                this.$nextTick(() => { const el = document.getElementById('logs'); if(el) el.scrollTop = el.scrollHeight; });
+                // Polling de estado cada 3s
+                this._pollExtraction();
+            } catch (e) {
+                this.agentRunStatus = 'ERROR';
+                this.agentLastLine = e.message;
+                this.agentLogs.push({ ts: new Date().toISOString(), level: 'ERR', msg: `START_FAIL: ${e.message}` });
+            }
+        },
+
+        _extractionPoller: null,
+        _pollExtraction() {
+            if (this._extractionPoller) clearInterval(this._extractionPoller);
+            this._extractionPoller = setInterval(async () => {
+                try {
+                    const st = await fetch('/api/control/agent/status', {
+                        headers: { 'bypass-tunnel-reminder': 'true' }
+                    }).then(r => r.json());
+                    this.agentRunStatus = st.status || (st.running ? 'RUNNING' : 'IDLE');
+                    this.agentLastLine  = st.last_log_line || '';
+                    if (!st.running) {
+                        clearInterval(this._extractionPoller);
+                        this._extractionPoller = null;
+                        this.fetchResources();
+                    }
+                } catch (e) {
+                    this.agentRunStatus = 'ERROR';
+                    clearInterval(this._extractionPoller);
+                }
+            }, 3000);
+        },
+
+        async fetchResources() {
+            try {
+                const r = await fetch('/api/resources', { headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
+                this.resources = r;
+                // Sincronizar estado running con el panel
+                if (r.agent_running && this.agentRunStatus === 'IDLE') {
+                    this.agentRunStatus = 'RUNNING';
+                    this._pollExtraction();
+                }
+            } catch (e) {}
+        },
+
 
         async setTab(tab) {
             this.activeTab = tab;

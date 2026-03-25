@@ -171,11 +171,11 @@ export default function TerminalLayout() {
                             <ul className="space-y-3 text-[#CCCCCC]">
                                 <li className="flex items-start gap-2">
                                     <span className="text-[#FFB000]">→</span>
-                                    <span>Uso de <b className="text-[#FFB000]">Qwen-1.5B</b> para filtrado previo de relevancia.</span>
+                                    <span>Motor Principal: <b className="text-[#FFB000]">Gemini Flash 2.0</b> habilitado para TODA la extracción (Alta Fidelidad).</span>
                                 </li>
                                 <li className="flex items-start gap-2">
                                     <span className="text-[#FFB000]">→</span>
-                                    <span>Gemini Flash 2.0 restringido a extracción final.</span>
+                                    <span>Fallback Local: Modelo <b>Qwen-1.5B</b> únicamente si Gemini no está disponible.</span>
                                 </li>
                                 <li className="flex items-start gap-2">
                                     <span className="text-[#FFB000]">→</span>

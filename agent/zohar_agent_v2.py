@@ -24,7 +24,28 @@ import hashlib, asyncio, httpx, duckdb
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 from typing import Optional, Any, List
-from aiocache import cached
+# Cache async in-memory (reemplaza aiocache — sin dependencias externas)
+import functools
+def cached(ttl: int = 300, **_kwargs):
+    """Decorador de cache async in-memory con TTL (segundos).
+    Drop-in replacement de aiocache.cached para funciones async.
+    """
+    def decorator(fn):
+        _cache: dict = {}
+        @functools.wraps(fn)
+        async def wrapper(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            now = time.monotonic()
+            if key in _cache:
+                result, ts = _cache[key]
+                if now - ts < ttl:
+                    return result
+            result = await fn(*args, **kwargs)
+            _cache[key] = (result, now)
+            return result
+        wrapper.cache_clear = lambda: _cache.clear()
+        return wrapper
+    return decorator
 
 try:
     from dotenv import load_dotenv
@@ -1254,8 +1275,8 @@ async def fetch_pdf_links(year: int, seen: SeenGacetas, log: logging.Logger) -> 
     if not pdf_links:
         return []
 
-    # TONL-C4: Pandas dedup era redundante — set() es O(n) y sin overhead de ~50MB
-    pdf_links = sorted(set(pdf_links))
+    # TONL-C4: Usar sorted reverse=True para ir de lo más reciente para atrás
+    pdf_links = sorted(set(pdf_links), reverse=True)
     log.info(f"  📄 {len(pdf_links)} PDFs encontrados usando métodos avanzados.")
     return pdf_links
 
@@ -1325,7 +1346,8 @@ async def process_pdf(pdf_url: str, year: int, queue: PersistentQueue,
 
     txt = txt_path.read_text(errors="replace")
     all_ids = sorted(set(ID_PATTERN.findall(txt)))
-    ids = [pid for pid in all_ids if "2026" in pid]
+    # Filtro estricto: Enfocarse únicamente en proyectos de Ensenada (Baja California = código '02')
+    ids = [pid for pid in all_ids if "2026" in pid and pid.startswith("02")]
 
     MAX_IDS_PER_PDF = 10 # No saturar la cola, avanzar gradual
     new_count: int = 0
@@ -1548,12 +1570,8 @@ def ground_data(extracted: dict, portal_data: dict, log: logging.Logger) -> dict
             log.debug(f"    📍 Geospatial Grounding: {len(programs)} programas hallados")
 
     # ── ANTECEDENTES HISTÓRICOS ──────────────────────────────────
-    if historical:
-        h_data = historical.find_by_pid(extracted.get("pid", ""))
-        if h_data:
-            extracted["historico_consulta"] = True
-            extracted["fechas_consulta"] = h_data["fechas"]
-            log.info(f"    📜 Antecedente histórico hallado para {extracted.get('pid')}")
+    # Se ha eliminado la base de datos histórica a petición del usuario.
+
 
     # ── CALIDAD DEL AIRE ────────────────────────────────────────
     if air_quality:
@@ -2315,6 +2333,12 @@ async def _validate_and_persist(pid: str, year: int, pdf: str, d: dict,
         log.debug(f"    [Gate-3 post-repair] {pid} score={score}")
 
     # ── Paso 4: Decisión final ───────────────────────────────────────────
+    # Filtro ESTRICTO: Únicamente Ensenada
+    if "ENSENADA" not in str(d.get("municipio", "")).upper():
+        log.info(f"    [REJECT] {pid} ignorado (Municipio: {d.get('municipio')}, requiere ENSENADA)")
+        queue.mark_success(pid) # Para no reintentarlo
+        return False
+
     # Aumentamos exigencia para evitar datos erráticos en dashboard
     if score < SCORE_ACCEPT:
         # Si tiene portal_data y aun así es bajo, es probable que el portal no tenga datos reales aún
@@ -2567,15 +2591,13 @@ async def main():
     CONFIG["DOCS_DIR"].mkdir(parents=True, exist_ok=True)
 
     async def run_cycle():
-        # ⚡ PRIORIDAD: Extracción de la queue global (IA)
-        if not _shutdown:
-            await run_extraction(queue, log)
-
-        # 🔍 Después del procesamiento, monitorear años para nuevos PDFs
+        # 🔍 PRIMERO: monitorear años para nuevos PDFs (de lo más reciente a lo más viejo)
         for year in target_years:
             if _shutdown: break
             log.info(f"Monitoring temporal index for year {year}...")
             pdf_links = await fetch_pdf_links(year, seen, log)
+            # Orden descendente
+            pdf_links.sort(reverse=True)
             total_new = 0
             for url in pdf_links:
                 if _shutdown: break
@@ -2583,6 +2605,10 @@ async def main():
                 total_new += n
             if total_new > 0:
                 log.info(f"Ingestion successful: {year}: {total_new} new identifiers cataloged")
+
+        # ⚡ DESPUÉS: Tomar las claves e ingresarlas para revisión (Extracción)
+        if not _shutdown:
+            await run_extraction(queue, log)
 
     if CONFIG["DAEMON_MODE"]:
         log.info(f"HIGH-THROUGHPUT BATCH ESCALATION ACTIVE — Processing temporal index: {target_years}")

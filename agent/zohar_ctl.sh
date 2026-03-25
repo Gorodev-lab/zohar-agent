@@ -67,11 +67,11 @@ case "$CMD" in
     ;;
 
   sweep)
-    # Barrido completo de todos los años configurados
+    # Barrido completo del año 2026
     _is_running && echo "⚠️  Detén el agente antes: ./zohar_ctl.sh stop" && exit 1
     _activate
-    echo "🧹 Iniciando barrido histórico (2005-2026)..."
-    nohup python3 "$AGENT_SCRIPT" >> "$LOG_FILE" 2>&1 &
+    echo "🧹 Iniciando barrido ambiental (2026)..."
+    nohup python3 "$AGENT_SCRIPT" --year 2026 >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     echo "✅ PID $! — Monitor: ./zohar_ctl.sh logs"
     ;;

@@ -40,3 +40,14 @@ documentos/
 api_log.txt
 tunnel_url.txt
 ingresos_2024.csv
+
+# Bases de datos y archivos extra generados dinamicamente
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+current_projects.json
+agent_log.txt
+wget-log
+wget-log.*
+skill.md

@@ -1,9 +1,5 @@
-'use client';
-
-import TerminalLayout from '@/components/TerminalLayout';
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return (
-    <TerminalLayout />
-  );
+  redirect('/index.html');
 }

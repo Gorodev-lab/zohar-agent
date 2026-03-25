@@ -1,9 +1,39 @@
-# Vercel Python Runtime Dependencies
-# Versiones idénticas al entorno local probado
+# ═══════════════════════════════════════════════════════
+# ZOHAR AGENT — Dependencias de producción
+# Auditado 2026-03-25 · Solo paquetes activamente usados
+# ═══════════════════════════════════════════════════════
+
+# ── API Server ─────────────────────────────────────────
 fastapi==0.135.1
 uvicorn==0.41.0
-supabase==2.28.1
 python-dotenv==1.2.2
-httpx==0.28.1
-pandas
+
+# ── Base de datos / Cloud ──────────────────────────────
+supabase==2.28.1
 duckdb
+
+# ── HTTP Client ────────────────────────────────────────
+httpx==0.28.1
+
+# ── Data ──────────────────────────────────────────────
+pandas
+
+# ── Gemini AI ─────────────────────────────────────────
+google-genai
+
+# ── Sistema (métricas en tiempo real) ─────────────────
+psutil
+
+# ── Fallback PDF/OCR (opcional, modo degradado si no hay poppler) ──
+pdf2image
+
+# ── Fallback Web Scraping (opcional, modo degradado si no hay Chrome) ──
+selenium
+webdriver-manager
+
+# ═══════════════════════════════════════════════════════
+# ELIMINADAS (ya NO se usan):
+#   aiocache     → reemplazado por cache async nativo en zohar_agent_v2.py
+#   pyiceberg    → no usado en ningún módulo activo
+#   requests     → reemplazado por httpx en toda la base de código
+# ═══════════════════════════════════════════════════════

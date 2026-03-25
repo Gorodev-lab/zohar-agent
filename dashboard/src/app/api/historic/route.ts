@@ -14,19 +14,21 @@ export async function GET() {
       historicData = JSON.parse(raw);
     }
 
-    // Normalizar formato histórico
-    const normalizedHistoric = historicData.map((item: any) => ({
-      Clave: item.clave,
-      Modalidad: item.modalidad,
-      Promovente: item.promovente,
-      Proyecto: item.proyecto,
-      Ubicacion: item.ubicacion,
-      Sector: item.sector,
-      Fecha: item.fechas,
-      Año: item.anio,
-      Estatus: item.anio === 2026 ? "CONCLUIDO_2026" : "HISTORICO",
-      links: item.links || {}
-    }));
+    // Normalizar formato histórico - UNICAMENTE 2026
+    const normalizedHistoric = historicData
+      .filter((item: any) => String(item.anio) === "2026")
+      .map((item: any) => ({
+        Clave: item.clave,
+        Modalidad: item.modalidad,
+        Promovente: item.promovente,
+        Proyecto: item.proyecto,
+        Ubicacion: item.ubicacion,
+        Sector: item.sector,
+        Fecha: item.fechas,
+        Año: item.anio,
+        Estatus: "CONCLUIDO_2026",
+        links: item.links || {}
+      }));
 
     // 2. Obtener extracciones LIVE de 2026 desde Supabase
     const { data: liveData, error: liveError } = await supabase

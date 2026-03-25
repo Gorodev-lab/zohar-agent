@@ -6,6 +6,7 @@ import urllib.request
 import datetime
 import json
 import subprocess
+import shutil
 import duckdb
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -14,6 +15,12 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from supabase import create_client, Client
 from dotenv import load_dotenv
+
+try:
+    import psutil
+    _PSUTIL_OK = True
+except ImportError:
+    _PSUTIL_OK = False
 
 # Cargar variables de entorno
 ENV_PATH = Path(__file__).parent.parent / ".env"
@@ -26,7 +33,7 @@ supabase_client: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-from routes import air_quality
+from api.routes import air_quality
 
 app = FastAPI(title="Zohar Intelligence API")
 
@@ -103,7 +110,8 @@ def _get_historic_all() -> list:
                 data = json.load(f)
             for item in data:
                 anio = str(item.get("anio", ""))
-                is_2026 = anio == "2026"
+                if anio != "2026":
+                    continue
                 clave = item.get("clave", "")
                 result.append({
                     "Clave":     clave,
@@ -114,7 +122,7 @@ def _get_historic_all() -> list:
                     "Sector":    item.get("sector", ""),
                     "Fecha":     item.get("fechas", ""),
                     "Año":       anio,
-                    "Estatus":   "CONCLUIDO_2026" if is_2026 else "HISTORICO",
+                    "Estatus":   "CONCLUIDO_2026",
                     "links":     _normalize_links(item.get("links", {}), clave)
                 })
         except Exception as e:
@@ -206,15 +214,18 @@ async def get_projects():
         with sqlite3.connect(DB_PATH) as conn:
             # Filtrado estricto para 2026 según requerimiento del usuario
             df = pd.read_sql_query("SELECT * FROM projects WHERE year = 2026 ORDER BY created_at DESC LIMIT 200", conn)
-            # Reintento con fallback a 2025 solo si no hay nada en 2026 (opcional, pero mejor ser estricto si se pidió "uníco interés")
-            if len(df) == 0:
-                df = pd.read_sql_query("SELECT * FROM projects ORDER BY year DESC, created_at DESC LIMIT 100", conn)
             
             # Normalizar nombres de columnas a mayúsculas para el Dashboard
             df.columns = [c.upper() for c in df.columns]
             df = df.rename(columns={"PID": "ID_PROYECTO", "YEAR": "ANIO"})
-            json_str = df.to_json(orient="records")
-            return json.loads(json_str)
+            records = df.to_dict(orient="records")
+            for r in records:
+                pid = r.get("ID_PROYECTO")
+                if pid:
+                    r["links"] = {
+                        "Visor Geográfico": f"{_SEMARNAT_GIS_BASE}/Aplicaciones/Tramites/ConsultaN.html?idS={pid}"
+                    }
+            return records
     except Exception as e:
         print(f"Error fetching projects: {e}")
         return []
@@ -529,6 +540,175 @@ def _is_agent_alive():
         return bool(out.strip())
     except:
         return False
+
+def _get_cpu_temp() -> str:
+    """Lee temperatura de CPU vía lm-sensors."""
+    try:
+        out = subprocess.check_output(['sensors'], text=True, timeout=3)
+        m = re.search(r'(?:CPU|temp1|Tdie):\s+\+?([\d\.]+)', out)
+        if m:
+            return f"{m.group(1)}°C"
+    except Exception:
+        pass
+    return "N/A"
+
+def _get_mem_pct() -> float:
+    """Porcentaje de RAM usada."""
+    if _PSUTIL_OK:
+        return round(psutil.virtual_memory().percent, 1)
+    try:
+        out = subprocess.check_output(['free', '-m'], text=True)
+        lines = out.splitlines()
+        parts = lines[1].split()
+        total, used = int(parts[1]), int(parts[2])
+        return round(used / total * 100, 1) if total else 0.0
+    except Exception:
+        return 0.0
+
+def _get_disk_free() -> str:
+    """Espacio libre en disco del proyecto."""
+    try:
+        total, used, free = shutil.disk_usage(str(BASE_DIR))
+        return f"{free // (1024**3)} GB libres / {total // (1024**3)} GB total"
+    except Exception:
+        return "N/A"
+
+def _get_queue_stats() -> dict:
+    """Estadísticas de la cola del agente."""
+    if not QUEUE_FILE.exists():
+        return {"total": 0, "success": 0, "pending": 0, "failed": 0}
+    try:
+        q = json.loads(QUEUE_FILE.read_text())
+        total = len(q)
+        success = sum(1 for v in q.values() if v.get("status") == "success")
+        pending = sum(1 for v in q.values() if v.get("status") == "pending")
+        failed  = sum(1 for v in q.values() if v.get("status") == "failed")
+        pct = round(success / total * 100, 1) if total else 0.0
+        return {"total": total, "success": success, "pending": pending, "failed": failed, "progress_pct": pct}
+    except Exception:
+        return {"total": 0, "success": 0, "pending": 0, "failed": 0}
+
+def _get_last_extraction_time() -> str:
+    """Timestamp de la última línea de log del agente."""
+    if not LOG_FILE.exists():
+        return "N/A"
+    try:
+        with open(LOG_FILE, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            if size == 0:
+                return "N/A"
+            f.seek(max(0, size - 2048))
+            raw = f.read().decode("utf-8", errors="replace")
+        for line in reversed(raw.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                return entry.get("ts", entry.get("time", "N/A"))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return "N/A"
+
+def _get_active_model() -> str:
+    """Modelo activo según el ModelRouter."""
+    try:
+        import sys
+        sys.path.insert(0, str(BASE_DIR))
+        from warehouse.model_router import ModelRouter
+        return ModelRouter.get_active_model_name("extraction")
+    except Exception:
+        return "gemini-2.0-flash"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FASE 3: Control por botón — ciclo único de extracción
+# ═══════════════════════════════════════════════════════════════════════════
+
+AGENT_V2_PATH = BASE_DIR / "agent" / "zohar_agent_v2.py"
+AGENT_OUTPUT_LOG = BASE_DIR / "agent" / "agent_output.log"
+
+@app.post("/api/control/agent/start-once")
+async def start_agent_once():
+    """Ejecuta UN SOLO ciclo de extracción (no demonio).
+    El agente NO corre automáticamente; solo responde a clicks del dashboard.
+    """
+    if _is_agent_alive():
+        raise HTTPException(status_code=400, detail="Agente ya en ejecución")
+    if not AGENT_V2_PATH.exists():
+        raise HTTPException(status_code=500, detail="zohar_agent_v2.py no encontrado")
+    try:
+        venv_python = BASE_DIR / "venv" / "bin" / "python3"
+        python_bin = str(venv_python) if venv_python.exists() else "python3"
+        subprocess.Popen(
+            [python_bin, str(AGENT_V2_PATH), "--single-run", "--year", "2026"],
+            cwd=str(BASE_DIR),
+            stdout=open(str(AGENT_OUTPUT_LOG), "w"),
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        return {
+            "status": "ok",
+            "mode": "single-run",
+            "msg": "Ciclo único 2026 iniciado. Revisa /api/logs para el progreso.",
+            "log": str(AGENT_OUTPUT_LOG),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/control/agent/status")
+async def get_agent_run_status():
+    """Estado actual del agente (para polling desde el dashboard)."""
+    alive = _is_agent_alive()
+    last_line = ""
+    if AGENT_OUTPUT_LOG.exists():
+        try:
+            with open(str(AGENT_OUTPUT_LOG), "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 512))
+                raw = f.read().decode("utf-8", errors="replace")
+            lines = [l.strip() for l in raw.splitlines() if l.strip()]
+            last_line = lines[-1] if lines else ""
+        except Exception:
+            pass
+    status = "RUNNING" if alive else ("IDLE" if not last_line else "COMPLETE")
+    return {"running": alive, "status": status, "last_log_line": last_line}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FASE 4: Recursos en tiempo real
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/resources")
+async def get_resources():
+    """Métricas en tiempo real del sistema: CPU, RAM, disco, DBs, cola, modelo."""
+    llama_ok, _ = _check_service("http://127.0.0.1:8001/v1/models", timeout=2)
+    qwen_ok, _  = _check_service("http://127.0.0.1:8002/v1/models", timeout=2)
+    return {
+        "ts": datetime.datetime.now().isoformat(),
+        "cpu_temp": _get_cpu_temp(),
+        "mem_used_pct": _get_mem_pct(),
+        "disk": _get_disk_free(),
+        "agent_running": _is_agent_alive(),
+        "llm_status": {
+            "llama": "online" if llama_ok else "offline",
+            "qwen":  "online" if qwen_ok  else "offline",
+            "gemini": "primary",
+        },
+        "databases": {
+            "sqlite":   {"path": str(DB_PATH),   "exists": DB_PATH.exists()},
+            "duckdb":   {"path": str(DUCK_PATH),  "exists": DUCK_PATH.exists()},
+            "supabase": {"status": "connected" if supabase_client else "disconnected"},
+        },
+        "queue": _get_queue_stats(),
+        "last_extraction": _get_last_extraction_time(),
+        "model_active": _get_active_model(),
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
