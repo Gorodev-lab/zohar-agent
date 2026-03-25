@@ -13,10 +13,12 @@ ARQUITECTURA:
 import os
 import json
 import datetime
+import csv
+from io import StringIO
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # ─── Detectar entorno ────────────────────────────────────────
@@ -161,10 +163,70 @@ async def get_projects():
                 "COORDENADAS": row.get("coordenadas"),
                 "CREATED_AT": row.get("created_at"),
             })
+            
+            pid = row.get("id_proyecto")
+            if pid:
+                projects[-1]["links"] = {
+                    "Visor Geográfico": f"{_GIS_BASE}/Aplicaciones/Tramites/ConsultaN.html?idS={pid}"
+                }
+                
         return projects
     except Exception as e:
         print(f"Error fetching projects: {e}")
         return []
+
+@app.get("/api/export/qgis")
+async def export_qgis():
+    """Exportación a CSV en entorno Vercel."""
+    _require_sb()
+    try:
+        res = sb.table("proyectos").select("id_proyecto,promovente,proyecto,municipio,estado,sector,coordenadas").eq("anio", 2026).execute()
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID_PROYECTO", "PROMOVENTE", "PROYECTO", "MUNICIPIO", "ESTADO", "SECTOR", "LATITUD", "LONGITUD", "COORDENADAS_RAW"])
+        
+        for row in res.data:
+            coords = str(row.get("coordenadas") or "")
+            lat, lon = "", ""
+            if "{" in coords and "}" in coords:
+                try:
+                    c_dict = json.loads(coords[coords.find("{"):coords.rfind("}")+1].replace("'", '"'))
+                    lat = str(c_dict.get("lat", c_dict.get("latitud", "")))
+                    lon = str(c_dict.get("lon", c_dict.get("lng", c_dict.get("longitud", ""))))
+                except:
+                    pass
+            writer.writerow([
+                row.get("id_proyecto"),
+                row.get("promovente"),
+                row.get("proyecto"),
+                row.get("municipio"),
+                row.get("estado"),
+                row.get("sector"),
+                lat, lon, coords
+            ])
+            
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=zohar_export_qgis_2026_cloud.csv"}
+        )
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# --- MOCKS CLOUD DEPLOYMENT ---
+@app.post("/api/control/agent/check")
+async def check_gacetas(): return {"status": "ok", "msg": "[CLOUD] Solo en entorno local."}
+
+@app.get("/api/control/agent/new_gacetas")
+async def get_new_gacetas(): return {"new_count": 0, "links": []}
+
+@app.post("/api/control/agent/start-once")
+async def start_agent_once(): return {"status": "ok", "msg": "[CLOUD] Dashboard solo lectura en la nube."}
+
+@app.get("/api/control/agent/status")
+async def get_agent_status(): return {"running": False, "status": "IDLE", "last_log_line": "[CLOUD] IDLE."}
 
 
 @app.get("/proyectos/{pid}")

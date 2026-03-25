@@ -2573,6 +2573,19 @@ async def main():
     queue = PersistentQueue(CONFIG["QUEUE_FILE"])
     seen  = SeenGacetas(CONFIG["SEEN_FILE"])
     
+    if "--check-new" in sys.argv:
+        all_new_links = []
+        for year in target_years:
+            if _shutdown: break
+            log.info(f"🔎 Buscando novedades en Gaceta Ecológica {year}...")
+            links = await fetch_pdf_links(year, seen, log)
+            all_new_links.extend(links)
+        
+        path = Path("/tmp/zohar_new_gacetas.json")
+        path.write_text(json.dumps({"ts": datetime.datetime.now().isoformat(), "new_count": len(all_new_links), "links": all_new_links}))
+        log.info(f"✅ CHECK COMPLETO: {len(all_new_links)} nuevas publicaciones detectadas.")
+        sys.exit(0)
+    
     # Inicializar Memoria y Prompts
     global memory, prompts, portal_cache, geospatial, historical, air_quality
     memory  = LocalIntelligenceMemory(CONFIG["DB_FILE"])

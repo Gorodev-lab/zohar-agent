@@ -593,44 +593,53 @@ a.term-link:hover {
             <!-- Empty State / CONTROL PANEL -->
             <div class="empty-state" x-show="!selectedRow" style="flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;padding:8px 6px;gap:0;">
 
-                <!-- ─── CONTROL DE EXTRACCIÓN ─── -->
+                <!-- ─── CONTROL DE EXTRACCIÓN Y MAPEO ─── -->
                 <div style="width:100%;border:1px solid var(--amber-dim);margin-bottom:6px;">
-                    <div style="background:var(--amber);color:var(--bg);font-weight:700;font-size:10px;padding:1px 4px;">══ CONTROL_EXTRACCIÓN ══</div>
+                    <div style="background:var(--amber);color:var(--bg);font-weight:700;font-size:10px;padding:1px 4px;display:flex;justify-content:space-between;">
+                        <span>══ CONTROL_EXTRACCIÓN ══</span>
+                        <a href="/api/export/qgis" target="_blank" style="color:var(--bg);text-decoration:none;font-weight:bold;cursor:pointer;">[ DESCAGAR DATA QGIS ▼ ]</a>
+                    </div>
                     <div style="padding:4px 6px;">
 
                         <!-- Indicador de estado -->
                         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
                             <span style="font-size:10px;color:var(--turquoise);">ESTADO:</span>
-                            <span x-show="agentRunStatus==='IDLE'"    style="color:var(--green);  font-weight:700;font-size:11px;">🟢 IDLE — ESPERANDO CMD</span>
-                            <span x-show="agentRunStatus==='RUNNING'" style="color:var(--amber);  font-weight:700;font-size:11px;animation:blink-cursor 1s step-end infinite;">🟡 RUNNING…</span>
+                            <span x-show="agentRunStatus==='IDLE' && !isChecking"    style="color:var(--green);  font-weight:700;font-size:11px;">🟢 IDLE — ESPERANDO CMD</span>
+                            <span x-show="agentRunStatus==='RUNNING' || isChecking" style="color:var(--amber);  font-weight:700;font-size:11px;animation:blink-cursor 1s step-end infinite;">🟡 RUNNING…</span>
                             <span x-show="agentRunStatus==='COMPLETE'"style="color:var(--green);  font-weight:700;font-size:11px;">✅ COMPLETO</span>
                             <span x-show="agentRunStatus==='ERROR'"   style="color:var(--red);    font-weight:700;font-size:11px;">🔴 ERROR</span>
                         </div>
 
-                        <!-- Botón prominente -->
-                        <button id="btn-extract"
-                            @click="startExtraction()"
-                            :disabled="agentRunStatus==='RUNNING'"
-                            style="
-                                width:100%;
-                                background: agentRunStatus==='RUNNING' ? 'var(--amber-dim)' : 'var(--amber)';
-                                color: var(--bg);
-                                font-family: var(--font);
-                                font-size: 12px;
-                                font-weight: 700;
-                                border: none;
-                                padding: 4px 0;
-                                cursor: pointer;
-                                letter-spacing: 1px;
-                                text-transform: uppercase;
-                            "
-                            :style="agentRunStatus==='RUNNING' ? 'background:var(--amber-dim);cursor:not-allowed;' : 'background:var(--amber);cursor:pointer;'"
-                        >
-                            ▶ INICIAR EXTRACCIÓN (CICLO ÚNICO)
-                        </button>
+                        <!-- Botones de Human In The Loop -->
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <button id="btn-check"
+                                @click="checkGacetas()"
+                                :disabled="agentRunStatus==='RUNNING' || isChecking"
+                                style="width:100%; background:var(--turquoise); color:var(--bg); font-weight:700; border:none; padding:4px 0; cursor:pointer;"
+                                :style="(agentRunStatus==='RUNNING' || isChecking) ? 'opacity:0.5;cursor:not-allowed;' : ''"
+                            >
+                                <span x-show="!isChecking">1. 🔎 BUSCAR NUEVAS PUBLICACIONES</span>
+                                <span x-show="isChecking">Sondeando Portal Semarnat...</span>
+                            </button>
+
+                            <!-- Alert si hay nuevas -->
+                            <div x-show="newGacetasCount > 0" style="padding:4px; background:var(--gold); color:var(--bg); font-weight:700; text-align:center; font-size:10px;">
+                                ⚠️ <span x-text="newGacetasCount"></span> NUEVAS PUBLICACIONES DETECTADAS
+                            </div>
+
+                            <button id="btn-extract"
+                                x-show="newGacetasCount > 0 || (resources.agent?.pending > 0)"
+                                @click="startExtraction()"
+                                :disabled="agentRunStatus==='RUNNING'"
+                                style="width:100%; background:var(--amber); color:var(--bg); font-weight:700; border:none; padding:4px 0; cursor:pointer;"
+                            >
+                                <span x-show="newGacetasCount > 0">2. ⚡ CONFIRMAR Y EXTRAER CLAVES</span>
+                                <span x-show="newGacetasCount === 0 && resources.agent?.pending > 0">▶ PROCESAR COLA PENDIENTE (<span x-text="resources.agent?.pending"></span>)</span>
+                            </button>
+                        </div>
 
                         <!-- Última línea de log -->
-                        <div x-show="agentRunStatus!=='IDLE'" style="margin-top:4px;font-size:9px;color:var(--amber-dim);word-break:break-all;line-height:12px;" x-text="agentLastLine || '—'"></div>
+                        <div x-show="agentRunStatus!=='IDLE' || isChecking" style="margin-top:4px;font-size:9px;color:var(--amber-dim);word-break:break-all;line-height:12px;" x-text="agentLastLine || '—'"></div>
                     </div>
                 </div>
 
@@ -689,6 +698,8 @@ function zoharTerminal() {
         status: {},
         agentRunStatus: 'IDLE',   // IDLE | RUNNING | COMPLETE | ERROR
         agentLastLine: '',
+        isChecking: false,
+        newGacetasCount: 0,
         resources: {},
         activeTab: 'historic',
         data: [],
@@ -772,6 +783,7 @@ function zoharTerminal() {
             setInterval(() => this.updateTime(), 1000);
             setInterval(() => this.fetchSidebarData(), 5000);
             setInterval(() => this.fetchResources(), 8000);
+            setInterval(() => this.pollNewGacetas(), 5000);
             this.setTab('projects');
         },
 
@@ -810,6 +822,30 @@ function zoharTerminal() {
             } catch (e) {
                 this.agentLogs.push({ ts: new Date().toISOString(), level: 'ERR', msg: `CTRL_FAIL: ${act} - ${e.message}` });
             }
+        },
+
+        async checkGacetas() {
+            if (this.isChecking || this.agentRunStatus === 'RUNNING') return;
+            this.isChecking = true;
+            this.agentLastLine = 'Consultando Gaceta Ecológica 2026. Por favor espere...';
+            try {
+                const res = await fetch('/api/control/agent/check', { method: 'POST', headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
+                this.agentLogs.push({ ts: new Date().toISOString(), level: 'INFO', msg: res.msg });
+            } catch (e) {
+                this.isChecking = false;
+                this.agentLastLine = e.message;
+            }
+        },
+
+        async pollNewGacetas() {
+            try {
+                const res = await fetch('/api/control/agent/new_gacetas', { headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
+                this.newGacetasCount = res.new_count || 0;
+                if (this.isChecking && this.newGacetasCount > 0) {
+                    this.isChecking = false;
+                    this.agentLastLine = 'Chequeo completo. Esperando confirmación.';
+                }
+            } catch (e) {}
         },
 
         async startExtraction() {

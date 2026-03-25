@@ -9,9 +9,11 @@ import subprocess
 import shutil
 import duckdb
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import csv
+from io import StringIO
 from pathlib import Path
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -230,6 +232,51 @@ async def get_projects():
     except Exception as e:
         print(f"Error fetching projects: {e}")
         return []
+
+@app.get("/api/export/qgis")
+async def export_qgis():
+    """
+    Exporta datos en CSV procesado para QGIS (Manual GeoComunes).
+    Separa lat y lon si fueron extraídas por el agente para cartografía manual.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql_query("SELECT pid, promovente, proyecto, municipio, state, sector, coordenadas FROM projects WHERE year = 2026", conn)
+            
+            output = StringIO()
+            writer = csv.writer(output)
+            writer.writerow(["ID_PROYECTO", "PROMOVENTE", "PROYECTO", "MUNICIPIO", "ESTADO", "SECTOR", "LATITUD", "LONGITUD", "COORDENADAS_RAW"])
+            
+            for _, row in df.iterrows():
+                coords = str(row.get("coordenadas") or "")
+                lat, lon = "", ""
+                
+                if "{" in coords and "}" in coords:
+                    try:
+                        c_dict = json.loads(coords[coords.find("{"):coords.rfind("}")+1].replace("'", '"'))
+                        lat = str(c_dict.get("lat", c_dict.get("latitud", "")))
+                        lon = str(c_dict.get("lon", c_dict.get("lng", c_dict.get("longitud", ""))))
+                    except:
+                        pass
+                
+                writer.writerow([
+                    row.get("pid"),
+                    row.get("promovente"),
+                    row.get("proyecto"),
+                    row.get("municipio"),
+                    row.get("state"),
+                    row.get("sector"),
+                    lat, lon, coords
+                ])
+                
+            output.seek(0)
+            return StreamingResponse(
+                output,
+                media_type="text/csv",
+                headers={"Content-Disposition": "attachment; filename=zohar_export_qgis_2026.csv"}
+            )
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get("/proyectos/{pid}")
 async def get_project_detail(pid: str):
@@ -631,6 +678,42 @@ def _get_active_model() -> str:
 
 AGENT_V2_PATH = BASE_DIR / "agent" / "zohar_agent_v2.py"
 AGENT_OUTPUT_LOG = BASE_DIR / "agent" / "agent_output.log"
+
+@app.post("/api/control/agent/check")
+async def check_gacetas():
+    if _is_agent_alive():
+        raise HTTPException(status_code=400, detail="Agente ya en ejecución")
+    if not AGENT_V2_PATH.exists():
+        raise HTTPException(status_code=500, detail="zohar_agent_v2.py no encontrado")
+    
+    # Borrar archivo temp si existe
+    p = Path("/tmp/zohar_new_gacetas.json")
+    if p.exists(): p.unlink()
+        
+    try:
+        venv_python = BASE_DIR / "venv" / "bin" / "python3"
+        python_bin = str(venv_python) if venv_python.exists() else "python3"
+        subprocess.Popen(
+            [python_bin, str(AGENT_V2_PATH), "--check-new", "--year", "2026"],
+            cwd=str(BASE_DIR),
+            stdout=open(str(AGENT_OUTPUT_LOG), "w"),
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        return {"status": "ok", "msg": "Chequeo de portal iniciado..."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/control/agent/new_gacetas")
+async def get_new_gacetas():
+    p = Path("/tmp/zohar_new_gacetas.json")
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except:
+            pass
+    return {"new_count": 0, "links": []}
+
 
 @app.post("/api/control/agent/start-once")
 async def start_agent_once():
