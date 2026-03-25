@@ -841,9 +841,11 @@ function zoharTerminal() {
             try {
                 const res = await fetch('/api/control/agent/new_gacetas', { headers: { 'bypass-tunnel-reminder': 'true' } }).then(r => r.json());
                 this.newGacetasCount = res.new_count || 0;
-                if (this.isChecking && this.newGacetasCount > 0) {
+                if (this.isChecking && res.status === 'done') {
                     this.isChecking = false;
-                    this.agentLastLine = 'Chequeo completo. Esperando confirmación.';
+                    this.agentLastLine = this.newGacetasCount > 0 
+                        ? 'Chequeo completo. Novedades pendientes.' 
+                        : 'Chequeo completo. No hay nuevas publicaciones.';
                 }
             } catch (e) {}
         },

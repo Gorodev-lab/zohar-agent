@@ -220,7 +220,7 @@ async def export_qgis():
 async def check_gacetas(): return {"status": "ok", "msg": "[CLOUD] Solo en entorno local."}
 
 @app.get("/api/control/agent/new_gacetas")
-async def get_new_gacetas(): return {"new_count": 0, "links": []}
+async def get_new_gacetas(): return {"status": "done", "new_count": 0, "links": []}
 
 @app.post("/api/control/agent/start-once")
 async def start_agent_once(): return {"status": "ok", "msg": "[CLOUD] Dashboard solo lectura en la nube."}

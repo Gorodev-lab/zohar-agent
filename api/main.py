@@ -709,10 +709,11 @@ async def get_new_gacetas():
     p = Path("/tmp/zohar_new_gacetas.json")
     if p.exists():
         try:
-            return json.loads(p.read_text())
+            data = json.loads(p.read_text())
+            return {"status": "done", "new_count": data.get("new_count", 0), "links": data.get("links", [])}
         except:
             pass
-    return {"new_count": 0, "links": []}
+    return {"status": "running", "new_count": 0, "links": []}
 
 
 @app.post("/api/control/agent/start-once")
